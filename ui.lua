@@ -340,18 +340,18 @@ local TweenService = game:GetService("TweenService")
 
 local Tweener = {}
 
--- Cached TweenInfos
+-- Cached TweenInfos (Calibrated for ultra-smooth responsiveness)
 Tweener.Info = {
-    Micro = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-    Fast = TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-    Normal = TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+    Micro = TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+    Fast = TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+    Normal = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
     Smooth = TweenInfo.new(0.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-    Spring = TweenInfo.new(0.38, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-    BackOut = TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-    Bouncy = TweenInfo.new(0.48, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
-    ExitFast = TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
+    Spring = TweenInfo.new(0.36, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+    BackOut = TweenInfo.new(0.30, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+    Bouncy = TweenInfo.new(0.42, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
+    ExitFast = TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
     ExitSmooth = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-    Appear = TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.InOut),
+    Appear = TweenInfo.new(0.26, Enum.EasingStyle.Quart, Enum.EasingDirection.InOut),
     RotateInfinite = TweenInfo.new(1.0, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1),
 }
 
@@ -380,7 +380,7 @@ function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: a
     return tween
 end
 
--- Physical Micro-press feedback (scale: 0.96) that scales the visual directly around its AnchorPoint
+-- Physical Micro-press feedback (scale: 0.96) with zero-latency mobile touch & cached text scalers
 function Tweener.BindPressFeedback(visual: GuiObject, trigger: GuiButton?, targetScale: number?, preserveText: boolean?)
     local button = trigger or (visual:IsA("GuiButton") and (visual :: GuiButton) or nil)
     if not button then return end
@@ -396,9 +396,11 @@ function Tweener.BindPressFeedback(visual: GuiObject, trigger: GuiButton?, targe
     local textCounterScale = 1 / targetPressScale
     local shouldPreserveText = preserveText == true
     
-    local function getDescendantTextScalers(): { UIScale }
+    local cachedScalers: { UIScale }? = nil
+    local function getTextScalers(): { UIScale }
         if not shouldPreserveText then return {} end
-        local scalers = {}
+        if cachedScalers then return cachedScalers end
+        cachedScalers = {}
         for _, desc in ipairs(visual:GetDescendants()) do
             if desc:IsA("TextLabel") or desc:IsA("TextBox") then
                 local tScale = desc:FindFirstChildOfClass("UIScale")
@@ -407,35 +409,39 @@ function Tweener.BindPressFeedback(visual: GuiObject, trigger: GuiButton?, targe
                     tScale.Scale = 1
                     tScale.Parent = desc
                 end
-                table.insert(scalers, tScale)
+                table.insert(cachedScalers, tScale)
             end
         end
-        return scalers
+        return cachedScalers
     end
     
-    button.MouseButton1Down:Connect(function()
-        local textScalers = getDescendantTextScalers()
+    local function press()
+        local textScalers = getTextScalers()
         Tweener.Tween(uiScale, Tweener.Info.Micro, { Scale = targetPressScale })
         for _, tScale in ipairs(textScalers) do
             Tweener.Tween(tScale, Tweener.Info.Micro, { Scale = textCounterScale })
         end
-    end)
+    end
     
     local function release()
-        local textScalers = getDescendantTextScalers()
+        local textScalers = getTextScalers()
         Tweener.Tween(uiScale, Tweener.Info.Fast, { Scale = 1.0 })
         for _, tScale in ipairs(textScalers) do
             Tweener.Tween(tScale, Tweener.Info.Fast, { Scale = 1.0 })
         end
     end
     
-    button.MouseButton1Up:Connect(release)
-    button.MouseLeave:Connect(release)
+    button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            press()
+        end
+    end)
     button.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             release()
         end
     end)
+    button.MouseLeave:Connect(release)
 end
 
 -- Hover lift and subtle glow border (layout-safe)
@@ -2899,8 +2905,16 @@ Container.__index = Container
 
 local Camera = workspace.CurrentCamera
 
+local function getExecutorFunc(name: string): any
+    local genv = (type(getgenv) == "function" and getgenv()) or nil
+    if genv and genv[name] ~= nil then return genv[name] end
+    local s, val = pcall(function() return getfenv()[name] end)
+    if s and val ~= nil then return val end
+    return nil
+end
+
 local function getGuiParent(): Instance
-    local gethui = (rawget(getfenv(), "gethui") :: any)
+    local gethui = getExecutorFunc("gethui")
     if type(gethui) == "function" then
         local success, res = pcall(gethui)
         if success and res then
@@ -2934,7 +2948,7 @@ local function cleanupPreviousInstances()
     end
 
     local roots = {}
-    local gethui = (rawget(getfenv(), "gethui") :: any)
+    local gethui = getExecutorFunc("gethui")
     if type(gethui) == "function" then
         local s, r = pcall(gethui)
         if s and r then table.insert(roots, r) end
@@ -3048,7 +3062,7 @@ function Container.new(title: string)
     screenGui.DisplayOrder = 999999
     
     -- Synapse / executor protection
-    local syn = rawget(getfenv(), "syn") :: any
+    local syn = getExecutorFunc("syn")
     if syn and type(syn) == "table" and type(syn.protect_gui) == "function" then
         pcall(syn.protect_gui, screenGui)
     end
@@ -3077,6 +3091,11 @@ end
 function Container:SetBaseWindowSize(size: Vector2)
     self.BaseWindowSize = size
     self:_updateScaling(true)
+end
+
+function Container:GetSafeAreaInsets(): (Vector2, Vector2)
+    local insetTopLeft, insetBottomRight = GuiService:GetGuiInset()
+    return insetTopLeft or Vector2.zero, insetBottomRight or Vector2.zero
 end
 
 function Container:Destroy()
@@ -7471,7 +7490,7 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
     popover.Name = "PopoverList"
     popover.Size = UDim2.new(1, 0, 0, 0)
     popover.Position = UDim2.new(0, 0, 1, 4)
-    popover.BackgroundColor3 = Color3.fromHex("#181822")
+    popover.BackgroundColor3 = Theme.GetToken("Card")
     popover.BorderSizePixel = 0
     popover.ScrollBarThickness = 2
     popover.ScrollBarImageColor3 = Theme.GetToken("BorderStrong")
@@ -9283,7 +9302,8 @@ function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance,
             local isMobile = (window.ContainerManager and window.ContainerManager.IsMobile) or false
             local cam = workspace.CurrentCamera
             local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
-            local shouldStack = isMobile or (vp.X < 850)
+            local contentW = page.AbsoluteSize.X
+            local shouldStack = isMobile or (contentW > 0 and contentW < 520) or (vp.X < 850)
             
             if shouldStack then
                 colLayout.FillDirection = Enum.FillDirection.Vertical
@@ -9300,6 +9320,7 @@ function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance,
         if workspace.CurrentCamera then
             table.insert(self._connections, workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveColumns))
         end
+        table.insert(self._connections, page:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateResponsiveColumns))
     else
         local singleContainer = Instance.new("Frame")
         singleContainer.Name = "SingleColumnContainer"
@@ -10836,6 +10857,8 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         Tweener.Tween(minWidget, Tweener.Info.Fast, { TextColor3 = Theme.GetToken("TextPrimary") })
     end)
 
+    minWidget.Visible = false
+    minShadow.Visible = false
     minWidget.Parent = self.RootGui
     self.MinWidget = minWidget
     self.MinWidgetScale = minWidgetScale
@@ -10886,7 +10909,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         end)
     end
     
-    local g = (rawget(getfenv(), "_G") :: any)
+    local g = (type(getgenv) == "function" and getgenv()) or (rawget(getfenv(), "_G") :: any)
     if g then
         g._SODIUM_ACTIVE_WINDOW = self
     end
@@ -11107,6 +11130,16 @@ function Window:ToggleVisibility()
                 self.DropShadow.Visible = false
             end
         end
+        
+        -- Show floating toggle button when window is hidden/minimized
+        if self.MinWidget then
+            self.MinWidget.Visible = true
+            if self.MinShadow then self.MinShadow.Visible = true end
+            if self.MinWidgetScale then
+                self.MinWidgetScale.Scale = 0.8
+                Tweener.Tween(self.MinWidgetScale, Tweener.Info.Fast, { Scale = 1.0 })
+            end
+        end
     else
         self.IsVisible = true
         self.IsMinimized = false
@@ -11115,6 +11148,12 @@ function Window:ToggleVisibility()
         if self.DropShadow then
             self.DropShadow.Visible = true
             self.DropShadow.ImageTransparency = 1.0
+        end
+        
+        -- Hide floating toggle button when window is open
+        if self.MinWidget then
+            self.MinWidget.Visible = false
+            if self.MinShadow then self.MinShadow.Visible = false end
         end
         
         -- Synchronized entrance micro-transition in lockstep
@@ -11126,12 +11165,6 @@ function Window:ToggleVisibility()
             Tweener.Tween(self.DropShadowScale, tweenInfo, { Scale = 1.0 })
             Tweener.Tween(self.DropShadow, tweenInfo, { ImageTransparency = 0.52 })
         end
-    end
-    if self.MinWidget then
-        self.MinWidget.Visible = true
-    end
-    if self.MinShadow then
-        self.MinShadow.Visible = true
     end
 end
 
@@ -11847,7 +11880,7 @@ function Window:Destroy()
     if self.RootGui then
         self.RootGui:Destroy()
     end
-    local g = (rawget(getfenv(), "_G") :: any)
+    local g = (type(getgenv) == "function" and getgenv()) or (rawget(getfenv(), "_G") :: any)
     if g and g._SODIUM_ACTIVE_WINDOW == self then
         g._SODIUM_ACTIVE_WINDOW = nil
     end
@@ -11890,7 +11923,7 @@ local SodiumUI = {
 local activeContainers = {}
 
 function SodiumUI:CreateWindow(props: any)
-    local g = (rawget(getfenv(), "_G") :: any)
+    local g = (type(getgenv) == "function" and getgenv()) or (rawget(getfenv(), "_G") :: any)
     if g and g._SODIUM_ACTIVE_WINDOW then
         pcall(function()
             g._SODIUM_ACTIVE_WINDOW:Destroy()
@@ -11937,7 +11970,7 @@ function SodiumUI:Popup(props: any)
 end
 
 function SodiumUI:Dialog(props: any)
-    local g = (rawget(getfenv(), "_G") :: any)
+    local g = (type(getgenv) == "function" and getgenv()) or (rawget(getfenv(), "_G") :: any)
     local activeWindow = g and g._SODIUM_ACTIVE_WINDOW
     if activeWindow and activeWindow.MainFrame and activeWindow.MainFrame.Parent then
         return Dialog.Show(activeWindow.MainFrame, props)
