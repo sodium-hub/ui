@@ -6646,7 +6646,7 @@ function Toggle.new(parent: Instance, configEngine: any, props: any)
     
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "Title"
-    titleLabel.Size = UDim2.new(1, -iconOffset - 50, 0, 18)
+    titleLabel.Size = UDim2.new(1, -iconOffset - 26, 0, 18)
     titleLabel.Position = UDim2.new(0, iconOffset, 0, if isDesc then 9 else 12)
     titleLabel.BackgroundTransparency = 1
     titleLabel.Font = Theme.Fonts.Header
@@ -6661,7 +6661,7 @@ function Toggle.new(parent: Instance, configEngine: any, props: any)
     if isDesc then
         descLabel = Instance.new("TextLabel")
         descLabel.Name = "Desc"
-        descLabel.Size = UDim2.new(1, -iconOffset - 50, 0, 16)
+        descLabel.Size = UDim2.new(1, -iconOffset - 26, 0, 16)
         descLabel.Position = UDim2.new(0, iconOffset, 0, 29)
         descLabel.BackgroundTransparency = 1
         descLabel.Font = Theme.Fonts.Body
@@ -6673,44 +6673,48 @@ function Toggle.new(parent: Instance, configEngine: any, props: any)
         descLabel.Parent = triggerBtn
     end
     
-    -- Animated Switch Control
-    local switchTrack = Instance.new("Frame")
-    switchTrack.Name = "SwitchTrack"
-    switchTrack.Size = UDim2.fromOffset(38, 20)
-    switchTrack.Position = UDim2.new(1, -19, 0.5, 0)
-    switchTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-    switchTrack.BackgroundColor3 = if self.Value then Theme.GetToken("Accent") else Theme.GetToken("SurfaceActive")
+    -- Checkbox Control (Modern rounded square with smooth color fade)
+    local checkSquare = Instance.new("Frame")
+    checkSquare.Name = "Checkbox"
+    checkSquare.Size = UDim2.fromOffset(20, 20)
+    checkSquare.Position = UDim2.new(1, 0, 0.5, 0)
+    checkSquare.AnchorPoint = Vector2.new(1, 0.5)
+    checkSquare.BackgroundColor3 = if self.Value then Theme.GetToken("Accent") else Theme.GetToken("SurfaceActive")
+    checkSquare.BorderSizePixel = 0
     
-    local trackCorner = Instance.new("UICorner")
-    trackCorner.CornerRadius = Theme.Radii.Pill
-    trackCorner.Parent = switchTrack
+    local checkCorner = Instance.new("UICorner")
+    checkCorner.CornerRadius = UDim.new(0, 5)
+    checkCorner.Parent = checkSquare
     
-    local trackStroke = Instance.new("UIStroke")
-    trackStroke.Color = if self.Value then Theme.GetToken("BorderAccent") else Theme.GetToken("BorderSubtle")
-    trackStroke.Thickness = 1
-    trackStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    trackStroke.Parent = switchTrack
+    local checkStroke = Instance.new("UIStroke")
+    checkStroke.Color = if self.Value then Theme.GetToken("BorderAccent") else Theme.GetToken("BorderSubtle")
+    checkStroke.Thickness = 1.2
+    checkStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    checkStroke.Parent = checkSquare
     
-    local thumb = Instance.new("Frame")
-    thumb.Name = "Thumb"
-    thumb.Size = UDim2.fromOffset(14, 14)
-    thumb.Position = if self.Value then UDim2.new(1, -10, 0.5, 0) else UDim2.new(0, 10, 0.5, 0)
-    thumb.AnchorPoint = Vector2.new(0.5, 0.5)
-    thumb.BackgroundColor3 = if self.Value then Theme.GetToken("TextPrimary") else Theme.GetToken("Placeholder")
+    local checkIcon = Instance.new("ImageLabel")
+    checkIcon.Name = "CheckIcon"
+    checkIcon.Size = UDim2.fromOffset(13, 13)
+    checkIcon.Position = UDim2.fromScale(0.5, 0.5)
+    checkIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    checkIcon.BackgroundTransparency = 1
+    checkIcon.ImageColor3 = Color3.fromRGB(255, 255, 255)
+    checkIcon.ImageTransparency = if self.Value then 0 else 1
+    Icons.Apply(checkIcon, "check")
+    checkIcon.Parent = checkSquare
     
-    local thumbCorner = Instance.new("UICorner")
-    thumbCorner.CornerRadius = Theme.Radii.Pill
-    thumbCorner.Parent = thumb
-    
-    thumb.Parent = switchTrack
-    switchTrack.Parent = triggerBtn
+    checkSquare.Parent = triggerBtn
     
     self.Container = container
     self.TitleLabel = titleLabel
     self.DescLabel = descLabel
-    self.SwitchTrack = switchTrack
-    self.TrackStroke = trackStroke
-    self.Thumb = thumb
+    self.CheckSquare = checkSquare
+    self.CheckStroke = checkStroke
+    self.CheckIcon = checkIcon
+    -- Backwards-compatibility aliases:
+    self.SwitchTrack = checkSquare
+    self.TrackStroke = checkStroke
+    self.Thumb = checkIcon
     
     Theme.Bind(container, "BackgroundColor3", "SurfaceHover")
     Theme.Bind(stroke, "Color", "BorderSubtle")
@@ -6721,17 +6725,15 @@ function Toggle.new(parent: Instance, configEngine: any, props: any)
     
     table.insert(self._connections, Theme.Changed:Connect(function()
         if self.Value then
-            switchTrack.BackgroundColor3 = Theme.GetToken("Accent")
-            trackStroke.Color = Theme.GetToken("BorderAccent")
-            thumb.BackgroundColor3 = Theme.GetToken("TextPrimary")
+            checkSquare.BackgroundColor3 = Theme.GetToken("Accent")
+            checkStroke.Color = Theme.GetToken("BorderAccent")
         else
-            switchTrack.BackgroundColor3 = Theme.GetToken("SurfaceActive")
-            trackStroke.Color = Theme.GetToken("BorderSubtle")
-            thumb.BackgroundColor3 = Theme.GetToken("Placeholder")
+            checkSquare.BackgroundColor3 = Theme.GetToken("SurfaceActive")
+            checkStroke.Color = Theme.GetToken("BorderSubtle")
         end
     end))
     
-    Tweener.BindPressFeedback(switchTrack, triggerBtn)
+    Tweener.BindPressFeedback(checkSquare, triggerBtn, 0.94)
     Tweener.BindHoverLift(container, stroke)
     
     table.insert(self._connections, triggerBtn.Activated:Connect(function()
@@ -6755,24 +6757,19 @@ end
 function Toggle:Set(state: boolean, skipCallback: boolean?)
     self.Value = state
     
-    local targetPos = if self.Value then UDim2.new(1, -10, 0.5, 0) else UDim2.new(0, 10, 0.5, 0)
     local targetBg = if self.Value then Theme.GetToken("Accent") else Theme.GetToken("SurfaceActive")
-    local targetThumb = if self.Value then Theme.GetToken("TextPrimary") else Theme.GetToken("Placeholder")
     local targetStroke = if self.Value then Theme.GetToken("BorderAccent") else Theme.GetToken("BorderSubtle")
+    local targetIconTrans = if self.Value then 0 else 1
     
-    -- Tactile stretch: slightly elongate thumb along movement axis, then settle back
-    Tweener.Tween(self.Thumb, Tweener.Info.Micro, { Size = UDim2.fromOffset(17, 12) }, function()
-        Tweener.Tween(self.Thumb, Tweener.Info.Fast, { Size = UDim2.fromOffset(14, 14) })
-    end)
-    Tweener.Tween(self.Thumb, Tweener.Info.Fast, {
-        Position = targetPos,
-        BackgroundColor3 = targetThumb,
-    })
-    Tweener.Tween(self.SwitchTrack, Tweener.Info.Fast, {
+    -- Smooth gradual color and icon fade
+    Tweener.Tween(self.CheckSquare, Tweener.Info.Normal, {
         BackgroundColor3 = targetBg,
     })
-    Tweener.Tween(self.TrackStroke, Tweener.Info.Fast, {
+    Tweener.Tween(self.CheckStroke, Tweener.Info.Normal, {
         Color = targetStroke,
+    })
+    Tweener.Tween(self.CheckIcon, Tweener.Info.Normal, {
+        ImageTransparency = targetIconTrans,
     })
     
     if not skipCallback and self.Callback then
@@ -6798,12 +6795,16 @@ function Toggle:Lock()
     self.Locked = true
     Tweener.Tween(self.Container, Tweener.Info.Fast, { BackgroundTransparency = 0.7 })
     Tweener.Tween(self.TitleLabel, Tweener.Info.Fast, { TextColor3 = Theme.GetToken("Placeholder") })
+    Tweener.Tween(self.CheckSquare, Tweener.Info.Fast, { BackgroundTransparency = 0.6 })
+    Tweener.Tween(self.CheckStroke, Tweener.Info.Fast, { Transparency = 0.6 })
 end
 
 function Toggle:Unlock()
     self.Locked = false
     Tweener.Tween(self.Container, Tweener.Info.Fast, { BackgroundTransparency = 0.5 })
     Tweener.Tween(self.TitleLabel, Tweener.Info.Fast, { TextColor3 = Theme.GetToken("TextPrimary") })
+    Tweener.Tween(self.CheckSquare, Tweener.Info.Fast, { BackgroundTransparency = 0 })
+    Tweener.Tween(self.CheckStroke, Tweener.Info.Fast, { Transparency = 0 })
 end
 
 function Toggle:Destroy()
@@ -9035,6 +9036,10 @@ function Section:Toggle(props: any)
     return Toggle.new(self.ElementsContainer, self.ConfigEngine, props)
 end
 
+function Section:Checkbox(props: any)
+    return self:Toggle(props)
+end
+
 function Section:Slider(props: any)
     local Slider = _require("Elements/Slider")
     return Slider.new(self.ElementsContainer, self.ConfigEngine, props)
@@ -9558,6 +9563,9 @@ Tab.CreateButton = Tab.Button
 Tab.AddButton = Tab.Button
 Tab.CreateToggle = Tab.Toggle
 Tab.AddToggle = Tab.Toggle
+Tab.Checkbox = Tab.Toggle
+Tab.CreateCheckbox = Tab.Toggle
+Tab.AddCheckbox = Tab.Toggle
 Tab.CreateSlider = Tab.Slider
 Tab.AddSlider = Tab.Slider
 Tab.CreateDropdown = Tab.Dropdown
