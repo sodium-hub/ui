@@ -1,9 +1,14 @@
--- Sodium UI Standalone (Obsidian Amethyst)
+--!strict
+--[=[
+    Sodium UI - Production Standalone Distribution
+    Theme: Obsidian Amethyst (#09090B / #131318 / #8B5CF6)
+    Architecture: WindUI Deconstructed & Re-engineered
+]=]
 
 local _MODULES = {}
 local _LOADED = {}
 
-local function _require(path)
+local function _require(path: string)
     if _LOADED[path] then
         return _LOADED[path]
     end
@@ -17,18 +22,36 @@ local function _require(path)
 end
 
 _MODULES['Core/Signals'] = function()
+--[=[
+    Sodium UI - Core/Signals.luau
+    Fast, lightweight, zero-allocation Signal & Observer bus for event dispatching.
+]=]
 
 local Signal = {}
 Signal.__index = Signal
 
-function Signal.new()
+type Connection = {
+    Connected: boolean,
+    Disconnect: (self: Connection) -> (),
+}
+
+export type SignalInstance<T...> = {
+    Connect: (self: SignalInstance<T...>, callback: (T...) -> ()) -> Connection,
+    Once: (self: SignalInstance<T...>, callback: (T...) -> ()) -> Connection,
+    Fire: (self: SignalInstance<T...>, T...) -> (),
+    Wait: (self: SignalInstance<T...>) -> T...,
+    DisconnectAll: (self: SignalInstance<T...>) -> (),
+    Destroy: (self: SignalInstance<T...>) -> (),
+}
+
+function Signal.new<T...>(): SignalInstance<T...>
     local self = setmetatable({}, Signal)
     self._listeners = {}
     self._totalListeners = 0
-    return self
+    return (self :: any) :: SignalInstance<T...>
 end
 
-function Signal:Connect(callback)
+function Signal:Connect(callback: (...any) -> ()): Connection
     assert(type(callback) == "function", "[SodiumUI.Signal] Callback must be a function")
     
     local connection = {
@@ -51,7 +74,7 @@ function Signal:Connect(callback)
     return connection
 end
 
-function Signal:Once(callback)
+function Signal:Once(callback: (...any) -> ()): Connection
     local connection
     connection = self:Connect(function(...)
         connection:Disconnect()
@@ -60,7 +83,7 @@ function Signal:Once(callback)
     return connection
 end
 
-function Signal:Fire(...)
+function Signal:Fire(...: any)
     for connection, callback in pairs(self._listeners) do
         if connection.Connected then
             task.spawn(callback, ...)
@@ -68,7 +91,7 @@ function Signal:Fire(...)
     end
 end
 
-function Signal:Wait()
+function Signal:Wait(): ...any
     local thread = coroutine.running()
     local connection
     connection = self:Connect(function(...)
@@ -92,17 +115,42 @@ function Signal:Destroy()
 end
 
 return Signal
-
 end
 
 _MODULES['Core/Theme'] = function()
+--[=[
+    Sodium UI - Core/Theme.luau
+    Obsidian Amethyst Theme System with dynamic token observers.
+    Refined: Sleek, crisp corner radii (8px window, 6px cards, 5px elements).
+]=]
 
 local Signals = _require("Core/Signals")
 
 local Theme = {}
 Theme.__index = Theme
 
-local ObsidianAmethyst = {
+export type ColorTokenMap = {
+    Background: Color3,
+    Card: Color3,
+    SurfaceHover: Color3,
+    SurfaceActive: Color3,
+    BorderSubtle: Color3,
+    BorderStrong: Color3,
+    BorderAccent: Color3,
+    TextPrimary: Color3,
+    TextMuted: Color3,
+    TextDark: Color3,
+    Placeholder: Color3,
+    Accent: Color3,
+    AccentDark: Color3,
+    AccentGlow: Color3,
+    AccentGlowTransparency: number,
+    Success: Color3,
+    Warning: Color3,
+    Danger: Color3,
+}
+
+local ObsidianAmethyst: ColorTokenMap = {
     Background = Color3.fromHex("#09090B"),
     Card = Color3.fromHex("#131318"),
     SurfaceHover = Color3.fromHex("#1C1C24"),
@@ -127,7 +175,7 @@ local ObsidianAmethyst = {
     Danger = Color3.fromHex("#EF4444"),
 }
 
-local WhiteMode = {
+local WhiteMode: ColorTokenMap = {
     Background = Color3.fromHex("#F8F9FA"),
     Card = Color3.fromHex("#FFFFFF"),
     SurfaceHover = Color3.fromHex("#F1F2F4"),
@@ -152,7 +200,7 @@ local WhiteMode = {
     Danger = Color3.fromHex("#DC2626"),
 }
 
-local Themes = {
+local Themes: { [string]: ColorTokenMap } = {
     ["Obsidian Amethyst"] = ObsidianAmethyst,
     ["Dark"] = ObsidianAmethyst,
     ["WhiteMode"] = WhiteMode,
@@ -165,13 +213,13 @@ local CurrentThemeTokens = ObsidianAmethyst
 Theme.Changed = Signals.new()
 
 local TweenService = game:GetService("TweenService")
-local boundInstances = setmetatable({}, { __mode = "k" })
+local boundInstances: any = setmetatable({}, { __mode = "k" })
 
-function Theme.Bind(instance, property, token)
+function Theme.Bind(instance: Instance, property: string, token: string)
     local val = Theme.GetToken(token)
     if val ~= nil then
         pcall(function()
-            instance [property] = val
+            (instance :: any)[property] = val
         end)
     end
     
@@ -188,30 +236,30 @@ function Theme.Bind(instance, property, token)
     })
 end
 
-function Theme.GetToken(token)
-    return CurrentThemeTokens [token]
+function Theme.GetToken<K>(token: K & keyof<ColorTokenMap>): any
+    return (CurrentThemeTokens :: any)[token]
 end
 
-function Theme.GetTokens()
+function Theme.GetTokens(): ColorTokenMap
     return CurrentThemeTokens
 end
 
-function Theme.GetCurrentThemeName()
+function Theme.GetCurrentThemeName(): string
     return CurrentThemeName
 end
 
-function Theme.AddTheme(name, tokens)
+function Theme.AddTheme(name: string, tokens: Partial<ColorTokenMap>)
     assert(type(name) == "string", "[SodiumUI.Theme] Theme name must be string")
     assert(type(tokens) == "table", "[SodiumUI.Theme] Tokens must be a table")
     
-    local merged = table.clone(ObsidianAmethyst)
+    local merged: any = table.clone(ObsidianAmethyst)
     for k, v in pairs(tokens) do
         merged[k] = v
     end
     Themes[name] = merged
 end
 
-function Theme.SetTheme(name)
+function Theme.SetTheme(name: string)
     local target = Themes[name]
     if not target then
         target = ObsidianAmethyst
@@ -234,13 +282,13 @@ function Theme.SetTheme(name)
     for instance, props in pairs(boundInstances) do
         if instance and instance.Parent then
             for _, item in ipairs(props) do
-                local tokenVal = CurrentThemeTokens [item.token]
+                local tokenVal = (CurrentThemeTokens :: any)[item.token]
                 if tokenVal ~= nil then
                     pcall(function()
                         if useTweens then
                             TweenService:Create(instance, tweenInfo, { [item.property] = tokenVal }):Play()
                         else
-                            instance [item.property] = tokenVal
+                            (instance :: any)[item.property] = tokenVal
                         end
                     end)
                 end
@@ -280,10 +328,13 @@ Theme.Radii = {
 }
 
 return Theme
-
 end
 
 _MODULES['Core/Tweener'] = function()
+--[=[
+    Sodium UI - Core/Tweener.luau
+    Cached TweenInfo manager and micro-interaction animation engine.
+]=]
 
 local TweenService = game:GetService("TweenService")
 
@@ -305,9 +356,9 @@ Tweener.Info = {
 }
 
 -- Weak-keyed table prevents memory leaks when instances are destroyed during tween
-local activeTweens = setmetatable({}, { __mode = "k" })
+local activeTweens: any = setmetatable({}, { __mode = "k" })
 
-function Tweener.Tween(instance, info, goals, onComplete)
+function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: any }, onComplete: (() -> ())?): Tween
     local currentTween = activeTweens[instance]
     if currentTween then
         currentTween:Cancel()
@@ -330,8 +381,8 @@ function Tweener.Tween(instance, info, goals, onComplete)
 end
 
 -- Physical Micro-press feedback (scale: 0.96) that scales the visual directly around its AnchorPoint
-function Tweener.BindPressFeedback(visual, trigger, targetScale, preserveText)
-    local button = trigger or (visual:IsA("GuiButton") and visual  or nil)
+function Tweener.BindPressFeedback(visual: GuiObject, trigger: GuiButton?, targetScale: number?, preserveText: boolean?)
+    local button = trigger or (visual:IsA("GuiButton") and (visual :: GuiButton) or nil)
     if not button then return end
     
     local uiScale = visual:FindFirstChildOfClass("UIScale")
@@ -345,7 +396,7 @@ function Tweener.BindPressFeedback(visual, trigger, targetScale, preserveText)
     local textCounterScale = 1 / targetPressScale
     local shouldPreserveText = preserveText == true
     
-    local function getDescendantTextScalers()
+    local function getDescendantTextScalers(): { UIScale }
         if not shouldPreserveText then return {} end
         local scalers = {}
         for _, desc in ipairs(visual:GetDescendants()) do
@@ -388,7 +439,14 @@ function Tweener.BindPressFeedback(visual, trigger, targetScale, preserveText)
 end
 
 -- Hover lift and subtle glow border (layout-safe)
-function Tweener.BindHoverLift(container, stroke, defaultBg, hoverBg, defaultStroke, hoverStroke)
+function Tweener.BindHoverLift(
+    container: GuiObject,
+    stroke: UIStroke?,
+    defaultBg: Color3?,
+    hoverBg: Color3?,
+    defaultStroke: Color3?,
+    hoverStroke: Color3?
+)
     local originalY = container.Position.Y.Offset
     local originalX = container.Position.X.Offset
     local originalScaleX = container.Position.X.Scale
@@ -431,7 +489,7 @@ function Tweener.BindHoverLift(container, stroke, defaultBg, hoverBg, defaultStr
 end
 
 -- Card size micro-press feedback (shrinks only card border/background into center, preserving exact text size)
-function Tweener.BindCardPressFeedback(card, trigger, shrinkOffset)
+function Tweener.BindCardPressFeedback(card: GuiObject, trigger: GuiButton, shrinkOffset: Vector2?)
     local offset = shrinkOffset or Vector2.new(6, 4)
     local defaultSize = card.Size
     local pressedSize = UDim2.new(defaultSize.X.Scale, defaultSize.X.Offset - offset.X, defaultSize.Y.Scale, defaultSize.Y.Offset - offset.Y)
@@ -459,7 +517,6 @@ return Tweener
 end
 
 _MODULES['Core/Icons'] = function()
-
 -- Sodium UI - Core/Icons.luau
 -- High-Performance Multi-Pack Icon Engine for Sodium UI
 -- Default Icon Pack: Lucide (1,700+ Icons Embedded Offline)
@@ -2480,16 +2537,25 @@ function Icons.AddIcons(packName, iconsData)
     end
 end
 
+-- Safe executor environment accessor
+local function getExecutorFunc(name: string): any
+    local genv = (type(getgenv) == "function" and getgenv()) or nil
+    if genv and genv[name] ~= nil then return genv[name] end
+    local s, val = pcall(function() return getfenv()[name] end)
+    if s and val ~= nil then return val end
+    return nil
+end
+
 function Icons.LoadPack(packName)
     local pName = string.lower(packName)
     if Icons.Packs[pName] then return true end
     
     local cdnUrl = "https://raw.githubusercontent.com/Footagesus/Icons/refs/heads/main/" .. pName .. "/dist/Icons.lua"
-    local getcustomasset = rawget(getfenv(), "getcustomasset") or rawget(getfenv(), "getsynasset")
-    local writefile = rawget(getfenv(), "writefile")
-    local isfile = rawget(getfenv(), "isfile")
-    local readfile = rawget(getfenv(), "readfile")
-    local makefolder = rawget(getfenv(), "makefolder")
+    local getcustomasset = getExecutorFunc("getcustomasset") or getExecutorFunc("getsynasset")
+    local writefile = getExecutorFunc("writefile")
+    local isfile = getExecutorFunc("isfile")
+    local readfile = getExecutorFunc("readfile")
+    local makefolder = getExecutorFunc("makefolder")
     
     local localFile = "SodiumHub/Cache/Icons_" .. pName .. ".lua"
     if type(isfile) == "function" and isfile(localFile) then
@@ -2717,10 +2783,10 @@ function Icons.ApplyAsset(imageLabel, source)
     local sourceStr = tostring(source)
     
     if string.find(sourceStr, "^https?://") then
-        local getcustomasset = (rawget(getfenv(), "getcustomasset") or rawget(getfenv(), "getsynasset"))
-        local writefile = rawget(getfenv(), "writefile")
-        local isfile = rawget(getfenv(), "isfile")
-        local makefolder = rawget(getfenv(), "makefolder")
+        local getcustomasset = getExecutorFunc("getcustomasset") or getExecutorFunc("getsynasset")
+        local writefile = getExecutorFunc("writefile")
+        local isfile = getExecutorFunc("isfile")
+        local makefolder = getExecutorFunc("makefolder")
         if type(getcustomasset) == "function" and type(writefile) == "function" then
             task.spawn(function()
                 pcall(function()
@@ -2811,10 +2877,13 @@ function Icons.Purge()
 end
 
 return Icons
-
 end
 
 _MODULES['Core/Container'] = function()
+--[=[
+    Sodium UI - Core/Container.luau
+    ScreenGui injection, dynamic UIScale engine, mobile safe-area clamp, and mobile toggle.
+]=]
 
 local Players = game:GetService("Players")
 local GuiService = game:GetService("GuiService")
@@ -2830,8 +2899,8 @@ Container.__index = Container
 
 local Camera = workspace.CurrentCamera
 
-local function getGuiParent()
-    local gethui = (rawget(getfenv(), "gethui"))
+local function getGuiParent(): Instance
+    local gethui = (rawget(getfenv(), "gethui") :: any)
     if type(gethui) == "function" then
         local success, res = pcall(gethui)
         if success and res then
@@ -2856,7 +2925,7 @@ local function getGuiParent()
 end
 
 local function cleanupPreviousInstances()
-    local g = (rawget(getfenv(), "_G"))
+    local g = (rawget(getfenv(), "_G") :: any)
     if g and g._SODIUM_ACTIVE_WINDOW and type(g._SODIUM_ACTIVE_WINDOW.Destroy) == "function" then
         pcall(function()
             g._SODIUM_ACTIVE_WINDOW:Destroy()
@@ -2865,7 +2934,7 @@ local function cleanupPreviousInstances()
     end
 
     local roots = {}
-    local gethui = (rawget(getfenv(), "gethui"))
+    local gethui = (rawget(getfenv(), "gethui") :: any)
     if type(gethui) == "function" then
         local s, r = pcall(gethui)
         if s and r then table.insert(roots, r) end
@@ -2896,7 +2965,7 @@ local function cleanupPreviousInstances()
     end
 end
 
-function Container:_updateScaling(immediate)
+function Container:_updateScaling(immediate: boolean?)
     if not Camera then
         Camera = workspace.CurrentCamera
     end
@@ -2965,7 +3034,7 @@ function Container:_initViewportScaling()
     end))
 end
 
-function Container.new(title)
+function Container.new(title: string)
     cleanupPreviousInstances()
     
     local self = setmetatable({}, Container)
@@ -2979,7 +3048,7 @@ function Container.new(title)
     screenGui.DisplayOrder = 999999
     
     -- Synapse / executor protection
-    local syn = rawget(getfenv(), "syn")
+    local syn = rawget(getfenv(), "syn") :: any
     if syn and type(syn) == "table" and type(syn.protect_gui) == "function" then
         pcall(syn.protect_gui, screenGui)
     end
@@ -3005,7 +3074,7 @@ function Container.new(title)
     return self
 end
 
-function Container:SetBaseWindowSize(size)
+function Container:SetBaseWindowSize(size: Vector2)
     self.BaseWindowSize = size
     self:_updateScaling(true)
 end
@@ -3027,29 +3096,53 @@ function Container:Destroy()
 end
 
 return Container
-
 end
 
 _MODULES['Storage/ConfigEngine'] = function()
+--[=[
+    Sodium UI - Storage/ConfigEngine.luau
+    Enterprise-Grade Advanced Config Engine:
+    - Smart Type Serialization (Color3, EnumItem, Vector2, Vector3, UDim2, Tables, Primitives)
+    - High-Performance In-Memory Cache with Instant Reads (Flags map)
+    - Debounced Auto-Save Engine
+    - Atomic UNC File I/O with checksum/validation
+    - Profile Management: Save, Load, Delete, List, Export, Import, ResetToDefaults
+    - Event Signals: OnConfigLoaded, OnConfigSaved, OnFlagChanged
+]=]
 
 local HttpService = game:GetService("HttpService")
+
+-- Safe executor environment accessor
+local function getExecutorFunc(name: string): any
+    local genv = (type(getgenv) == "function" and getgenv()) or nil
+    if genv and genv[name] ~= nil then return genv[name] end
+    local s, val = pcall(function() return getfenv()[name] end)
+    if s and val ~= nil then return val end
+    return nil
+end
 
 local ConfigEngine = {}
 ConfigEngine.__index = ConfigEngine
 
+export type FlagHandler = {
+    Get: () -> any,
+    Set: (val: any, skipCallback: boolean?) -> (),
+    Default: any?,
+}
+
 -- Type Serialization Helper
-local function serializeValue(val)
+local function serializeValue(val: any): any
     local t = typeof(val)
     if t == "Color3" then
         return {
             __type = "Color3",
-            hex = val :ToHex(),
-            r = val .R,
-            g = val .G,
-            b = val .B,
+            hex = (val :: Color3):ToHex(),
+            r = (val :: Color3).R,
+            g = (val :: Color3).G,
+            b = (val :: Color3).B,
         }
     elseif t == "EnumItem" then
-        local enumItem = val
+        local enumItem = val :: EnumItem
         return {
             __type = "EnumItem",
             enum = tostring(enumItem.EnumType),
@@ -3057,13 +3150,13 @@ local function serializeValue(val)
             value = enumItem.Value,
         }
     elseif t == "Vector2" then
-        local v = val
+        local v = val :: Vector2
         return { __type = "Vector2", x = v.X, y = v.Y }
     elseif t == "Vector3" then
-        local v = val
+        local v = val :: Vector3
         return { __type = "Vector3", x = v.X, y = v.Y, z = v.Z }
     elseif t == "UDim2" then
-        local u = val
+        local u = val :: UDim2
         return { __type = "UDim2", sx = u.X.Scale, ox = u.X.Offset, sy = u.Y.Scale, oy = u.Y.Offset }
     elseif t == "table" then
         local copy = {}
@@ -3077,7 +3170,7 @@ local function serializeValue(val)
 end
 
 -- Type Deserialization Helper
-local function deserializeValue(val)
+local function deserializeValue(val: any): any
     if type(val) == "table" and val.__type then
         local typeName = val.__type
         if typeName == "Color3" then
@@ -3090,7 +3183,7 @@ local function deserializeValue(val)
             end
         elseif typeName == "EnumItem" then
             if val.enum and val.name then
-                local enumGroup = Enum [val.enum]
+                local enumGroup = (Enum :: any)[val.enum]
                 if enumGroup and enumGroup[val.name] then
                     return enumGroup[val.name]
                 end
@@ -3112,10 +3205,11 @@ local function deserializeValue(val)
     return val
 end
 
+
 local ConfigFile = {}
 ConfigFile.__index = ConfigFile
 
-function ConfigFile.new(engine, name)
+function ConfigFile.new(engine: any, name: string)
     local self = setmetatable({}, ConfigFile)
     self.Engine = engine
     self.Name = name
@@ -3123,7 +3217,7 @@ function ConfigFile.new(engine, name)
     return self
 end
 
-function ConfigFile:Register(key, element)
+function ConfigFile:Register(key: string, element: any)
     self.RegisteredElements[key] = element
     if element and type(element.Get) == "function" and type(element.Set) == "function" then
         self.Engine:RegisterFlag(key, function() return element:Get() end, function(v, skip) element:Set(v, skip) end, element:Get())
@@ -3131,35 +3225,35 @@ function ConfigFile:Register(key, element)
     return self
 end
 
-function ConfigFile:Save()
+function ConfigFile:Save(): (boolean, string?)
     return self.Engine:SaveConfig(self.Name)
 end
 
-function ConfigFile:Load(silent)
+function ConfigFile:Load(silent: boolean?): (boolean, string?)
     return self.Engine:LoadConfig(self.Name, silent)
 end
 
-function ConfigFile:Delete()
+function ConfigFile:Delete(): boolean
     return self.Engine:DeleteConfig(self.Name)
 end
 
-function ConfigFile:Export()
+function ConfigFile:Export(): (string?, string?)
     return self.Engine:ExportConfig(self.Name)
 end
 
-function ConfigFile:Import(jsonString)
+function ConfigFile:Import(jsonString: string): (boolean, string?)
     return self.Engine:ImportConfig(self.Name, jsonString)
 end
 
-function ConfigEngine.new(folderName)
+function ConfigEngine.new(folderName: string?)
     local self = setmetatable({}, ConfigEngine)
     self.FolderName = folderName or "SodiumHub"
     self.ConfigsFolder = self.FolderName .. "/configs"
     
-    self.Flags = {}
-    self._handlers = {}
-    self._listeners = {}
-    self.InMemoryStorage = {}
+    self.Flags = {} :: { [string]: any }
+    self._handlers = {} :: { [string]: FlagHandler }
+    self._listeners = {} :: { [string]: { (newVal: any) -> () } }
+    self.InMemoryStorage = {} :: { [string]: string }
     
     self.ActiveConfig = "Default"
     self.AutoSaveEnabled = false
@@ -3174,18 +3268,19 @@ function ConfigEngine.new(folderName)
     return self
 end
 
-function ConfigEngine:_hasUNC()
-    local env = getfenv()
-    return type(rawget(env, "writefile")) == "function"
-        and type(rawget(env, "readfile")) == "function"
-        and type(rawget(env, "isfile")) == "function"
+function ConfigEngine:_hasUNC(): boolean
+    local writef = getExecutorFunc("writefile")
+    local readf = getExecutorFunc("readfile")
+    local isf = getExecutorFunc("isfile")
+    return type(writef) == "function"
+        and type(readf) == "function"
+        and type(isf) == "function"
 end
 
 function ConfigEngine:_ensureDirectories()
     if not self:_hasUNC() then return end
-    local env = getfenv()
-    local makefolder = rawget(env, "makefolder")
-    local isfolder = rawget(env, "isfolder")
+    local makefolder = getExecutorFunc("makefolder")
+    local isfolder = getExecutorFunc("isfolder")
     
     if type(isfolder) == "function" and type(makefolder) == "function" then
         pcall(function()
@@ -3199,7 +3294,7 @@ function ConfigEngine:_ensureDirectories()
     end
 end
 
-function ConfigEngine:RegisterFlag(flag, getter, setter, defaultVal)
+function ConfigEngine:RegisterFlag(flag: string, getter: () -> any, setter: (val: any, skipCallback: boolean?) -> (), defaultVal: any?)
     assert(type(flag) == "string" and flag ~= "", "[SodiumUI.Config] Invalid flag name")
     
     local initial = if defaultVal ~= nil then defaultVal else getter()
@@ -3211,13 +3306,13 @@ function ConfigEngine:RegisterFlag(flag, getter, setter, defaultVal)
     }
 end
 
-function ConfigEngine:UnregisterFlag(flag)
+function ConfigEngine:UnregisterFlag(flag: string)
     self.Flags[flag] = nil
     self._handlers[flag] = nil
     self._listeners[flag] = nil
 end
 
-function ConfigEngine:Get(flag)
+function ConfigEngine:Get(flag: string): any
     local handler = self._handlers[flag]
     if handler then
         local s, v = pcall(handler.Get)
@@ -3229,7 +3324,7 @@ function ConfigEngine:Get(flag)
     return self.Flags[flag]
 end
 
-function ConfigEngine:Set(flag, val, skipCallback)
+function ConfigEngine:Set(flag: string, val: any, skipCallback: boolean?)
     local handler = self._handlers[flag]
     if handler then
         pcall(handler.Set, val, skipCallback)
@@ -3248,7 +3343,7 @@ function ConfigEngine:Set(flag, val, skipCallback)
     end
 end
 
-function ConfigEngine:OnChanged(flag, callback)
+function ConfigEngine:OnChanged(flag: string, callback: (newVal: any) -> ()): () -> ()
     if not self._listeners[flag] then
         self._listeners[flag] = {}
     end
@@ -3263,7 +3358,7 @@ function ConfigEngine:OnChanged(flag, callback)
     end
 end
 
-function ConfigEngine:SetAutoSave(enabled, configName, delaySeconds)
+function ConfigEngine:SetAutoSave(enabled: boolean, configName: string?, delaySeconds: number?)
     self.AutoSaveEnabled = enabled
     if configName then
         self.ActiveConfig = configName
@@ -3284,7 +3379,7 @@ function ConfigEngine:_triggerAutoSave()
     end)
 end
 
-function ConfigEngine:SaveConfig(configName)
+function ConfigEngine:SaveConfig(configName: string): (boolean, string?)
     assert(type(configName) == "string" and configName ~= "", "[SodiumUI.Config] Invalid config name")
     
     local stateMap = {}
@@ -3319,9 +3414,8 @@ function ConfigEngine:SaveConfig(configName)
     
     if self:_hasUNC() then
         self:_ensureDirectories()
-        local env = getfenv()
-        local writefile = rawget(env, "writefile")
-        local isfile = rawget(env, "isfile")
+        local writefile = getExecutorFunc("writefile")
+        local isfile = getExecutorFunc("isfile")
         
         local writeOk, writeErr = pcall(writefile, filePath, jsonString)
         if not writeOk then
@@ -3339,17 +3433,16 @@ function ConfigEngine:SaveConfig(configName)
     end
 end
 
-function ConfigEngine:LoadConfig(configName, silent)
+function ConfigEngine:LoadConfig(configName: string, silent: boolean?): (boolean, string?)
     assert(type(configName) == "string" and configName ~= "", "[SodiumUI.Config] Invalid config name")
     local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
     
-    local jsonString
+    local jsonString: string?
     if self:_hasUNC() then
-        local env = getfenv()
-        local isfile = rawget(env, "isfile")
-        local readfile = rawget(env, "readfile")
+        local isfile = getExecutorFunc("isfile")
+        local readfile = getExecutorFunc("readfile")
         
-        if isfile(filePath) then
+        if type(isfile) == "function" and isfile(filePath) and type(readfile) == "function" then
             local readOk, res = pcall(readfile, filePath)
             if readOk and type(res) == "string" and res ~= "" then
                 jsonString = res
@@ -3398,13 +3491,12 @@ function ConfigEngine:LoadConfig(configName, silent)
     return true, "Config loaded successfully"
 end
 
-function ConfigEngine:ExportConfig(configName)
+function ConfigEngine:ExportConfig(configName: string): (string?, string?)
     local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
     if self:_hasUNC() then
-        local env = getfenv()
-        local isfile = rawget(env, "isfile")
-        local readfile = rawget(env, "readfile")
-        if isfile(filePath) then
+        local isfile = getExecutorFunc("isfile")
+        local readfile = getExecutorFunc("readfile")
+        if type(isfile) == "function" and isfile(filePath) and type(readfile) == "function" then
             local s, res = pcall(readfile, filePath)
             if s and res then return res, nil end
         end
@@ -3415,7 +3507,7 @@ function ConfigEngine:ExportConfig(configName)
     return nil, "Config not found"
 end
 
-function ConfigEngine:ImportConfig(configName, jsonString)
+function ConfigEngine:ImportConfig(configName: string, jsonString: string): (boolean, string?)
     local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, jsonString)
     if not decodeOk or type(decoded) ~= "table" or type(decoded.flags) ~= "table" then
         return false, "Invalid JSON string format"
@@ -3424,22 +3516,24 @@ function ConfigEngine:ImportConfig(configName, jsonString)
     local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
     if self:_hasUNC() then
         self:_ensureDirectories()
-        local writefile = rawget(getfenv(), "writefile")
-        local s, err = pcall(writefile, filePath, jsonString)
-        if not s then return false, tostring(err) end
-        return true, "Imported and saved successfully"
+        local writefile = getExecutorFunc("writefile")
+        if type(writefile) == "function" then
+            local s, err = pcall(writefile, filePath, jsonString)
+            if not s then return false, tostring(err) end
+            return true, "Imported and saved successfully"
+        end
+        return false, "writefile not available"
     else
         self.InMemoryStorage[configName] = jsonString
         return true, "Imported to memory"
     end
 end
 
-function ConfigEngine:DeleteConfig(configName)
+function ConfigEngine:DeleteConfig(configName: string): boolean
     local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
     if self:_hasUNC() then
-        local env = getfenv()
-        local isfile = rawget(env, "isfile")
-        local delfile = rawget(env, "delfile")
+        local isfile = getExecutorFunc("isfile")
+        local delfile = getExecutorFunc("delfile")
         if type(isfile) == "function" and type(delfile) == "function" and isfile(filePath) then
             pcall(delfile, filePath)
             return true
@@ -3451,12 +3545,11 @@ function ConfigEngine:DeleteConfig(configName)
     return false
 end
 
-function ConfigEngine:GetConfigs()
+function ConfigEngine:GetConfigs(): { string }
     local configs = {}
     if self:_hasUNC() then
-        local env = getfenv()
-        local listfiles = rawget(env, "listfiles")
-        local isfolder = rawget(env, "isfolder")
+        local listfiles = getExecutorFunc("listfiles")
+        local isfolder = getExecutorFunc("isfolder")
         
         if type(listfiles) == "function" and type(isfolder) == "function" and isfolder(self.ConfigsFolder) then
             local files = listfiles(self.ConfigsFolder)
@@ -3476,7 +3569,8 @@ function ConfigEngine:GetConfigs()
     return configs
 end
 
-function ConfigEngine:_readState()
+
+function ConfigEngine:_readState(): { [string]: any }
     local state = {
         selected = self.ActiveConfig or "Default",
         autoload = false,
@@ -3484,9 +3578,8 @@ function ConfigEngine:_readState()
     }
     
     if self:_hasUNC() then
-        local env = getfenv()
-        local isfile = rawget(env, "isfile")
-        local readfile = rawget(env, "readfile")
+        local isfile = getExecutorFunc("isfile")
+        local readfile = getExecutorFunc("readfile")
         if type(isfile) == "function" and isfile(self.StateFile) and type(readfile) == "function" then
             local s, raw = pcall(readfile, self.StateFile)
             if s and type(raw) == "string" and raw ~= "" then
@@ -3511,7 +3604,7 @@ function ConfigEngine:_readState()
     return state
 end
 
-function ConfigEngine:_writeState(patch)
+function ConfigEngine:_writeState(patch: { [string]: any }?)
     local state = self:_readState()
     if patch and type(patch) == "table" then
         for k, v in pairs(patch) do
@@ -3528,7 +3621,7 @@ function ConfigEngine:_writeState(patch)
     
     if self:_hasUNC() then
         self:_ensureDirectories()
-        local writefile = rawget(getfenv(), "writefile")
+        local writefile = getExecutorFunc("writefile")
         if type(writefile) == "function" then
             pcall(writefile, self.StateFile, HttpService:JSONEncode(state))
         end
@@ -3537,16 +3630,16 @@ function ConfigEngine:_writeState(patch)
     return state
 end
 
-function ConfigEngine:GetAutoLoad()
+function ConfigEngine:GetAutoLoad(): boolean
     local state = self:_readState()
     return state.autoload == true
 end
 
-function ConfigEngine:SetAutoLoad(enabled)
+function ConfigEngine:SetAutoLoad(enabled: boolean)
     self:_writeState({ autoload = enabled, selected = self.ActiveConfig })
 end
 
-function ConfigEngine:CheckAndAutoLoad()
+function ConfigEngine:CheckAndAutoLoad(): (boolean, string?)
     local state = self:_readState()
     if state.autoload == true and state.selected and state.selected ~= "" then
         return self:LoadConfig(state.selected, true)
@@ -3554,16 +3647,16 @@ function ConfigEngine:CheckAndAutoLoad()
     return false, "Auto-load disabled"
 end
 
-function ConfigEngine:CreateConfig(name)
+function ConfigEngine:CreateConfig(name: string)
     assert(type(name) == "string" and name ~= "", "[SodiumUI.Config] Invalid config name")
     return ConfigFile.new(self, name)
 end
 
-function ConfigEngine:AllConfigs()
+function ConfigEngine:AllConfigs(): { string }
     return self:GetConfigs()
 end
 
-function ConfigEngine:Init(window)
+function ConfigEngine:Init(window: any)
     self.Window = window
     task.defer(function()
         pcall(function()
@@ -3572,7 +3665,7 @@ function ConfigEngine:Init(window)
     end)
 end
 
-function ConfigEngine:ResetToDefaults(silent)
+function ConfigEngine:ResetToDefaults(silent: boolean?)
     for flag, handler in pairs(self._handlers) do
         if handler.Default ~= nil then
             pcall(handler.Set, handler.Default, silent)
@@ -3589,16 +3682,19 @@ function ConfigEngine:ResetToDefaults(silent)
 end
 
 return ConfigEngine
-
 end
 
 _MODULES['Components/Primitives'] = function()
+--[=[
+    Sodium UI - Components/Primitives.luau
+    Divider, Space, and Tag pill utility components.
+]=]
 
 local Theme = _require("Core/Theme")
 
 local Primitives = {}
 
-function Primitives.Divider(parent, text)
+function Primitives.Divider(parent: Instance, text: string?): Frame
     local divider = Instance.new("Frame")
     divider.Name = "Divider"
     divider.Size = UDim2.new(1, 0, 0, if text and text ~= "" then 24 else 8)
@@ -3640,7 +3736,7 @@ function Primitives.Divider(parent, text)
     return divider
 end
 
-function Primitives.Space(parent, height)
+function Primitives.Space(parent: Instance, height: number?): Frame
     local space = Instance.new("Frame")
     space.Name = "Space"
     space.Size = UDim2.new(1, 0, 0, height or 8)
@@ -3650,7 +3746,7 @@ function Primitives.Space(parent, height)
     return space
 end
 
-function Primitives.Tag(parent, text, color, radius)
+function Primitives.Tag(parent: Instance, text: string, color: Color3?, radius: number?): Frame
     local tag = Instance.new("Frame")
     tag.Name = "Tag_" .. text
     tag.Size = UDim2.new(0, 0, 0, 20)
@@ -3688,10 +3784,14 @@ function Primitives.Tag(parent, text, color, radius)
 end
 
 return Primitives
-
 end
 
 _MODULES['Components/Notification'] = function()
+--[=[
+    Sodium UI - Components/Notification.luau
+    Non-intrusive, responsive toast alert system.
+    Dynamically scales with screen dimensions, supports safe-area insets, and auto-stacks smoothly.
+]=]
 
 local TweenService = game:GetService("TweenService")
 
@@ -3701,11 +3801,18 @@ local Icons = _require("Core/Icons")
 
 local Notification = {}
 
-local toastStackContainer = nil
+export type NotifyProps = {
+    Title: string,
+    Content: string?,
+    Duration: number?,
+    Icon: string?,
+}
+
+local toastStackContainer: Frame? = nil
 local activeToasts = {}
 local stackConnections = {}
 
-local function updateStackGeometry(stack)
+local function updateStackGeometry(stack: Frame)
     local camera = workspace.CurrentCamera
     local vp = camera and camera.ViewportSize or Vector2.new(1920, 1080)
     local isSmallScreen = vp.X < 900 or vp.Y < 600
@@ -3726,7 +3833,7 @@ local function cleanupStackConnections()
     table.clear(stackConnections)
 end
 
-local function getOrCreateStack(root)
+local function getOrCreateStack(root: Instance): Frame
     if toastStackContainer and toastStackContainer.Parent then
         return toastStackContainer
     end
@@ -3776,7 +3883,7 @@ local function getOrCreateStack(root)
     return stack
 end
 
-local function dismissToast(toastData)
+local function dismissToast(toastData: any)
     if toastData.Dismissed then return end
     toastData.Dismissed = true
     
@@ -3808,7 +3915,7 @@ local function dismissToast(toastData)
     end
 end
 
-function Notification.Notify(rootGui, props)
+function Notification.Notify(rootGui: Instance, props: NotifyProps)
     local stack = getOrCreateStack(rootGui)
     local duration = props.Duration or 3.2
     
@@ -3979,10 +4086,13 @@ function Notification.Notify(rootGui, props)
 end
 
 return Notification
-
 end
 
 _MODULES['Components/Popup'] = function()
+--[=[
+    Sodium UI - Components/Popup.luau
+    Modal Prompt with backdrop dimmer and spring-inspired scale transition.
+]=]
 
 local Theme = _require("Core/Theme")
 local Tweener = _require("Core/Tweener")
@@ -3990,7 +4100,21 @@ local Icons = _require("Core/Icons")
 
 local Popup = {}
 
-function Popup.Show(rootGui, props)
+export type PopupButton = {
+    Title: string,
+    Icon: string?,
+    Callback: (() -> ())?,
+    Variant: string?, -- "Primary", "Secondary", "Danger"
+}
+
+export type PopupProps = {
+    Title: string,
+    Icon: string?,
+    Content: string,
+    Buttons: { PopupButton }?,
+}
+
+function Popup.Show(rootGui: Instance, props: PopupProps)
     local backdrop = Instance.new("TextButton")
     backdrop.Name = "ModalBackdrop"
     backdrop.Size = UDim2.fromScale(1, 1)
@@ -4114,7 +4238,7 @@ function Popup.Show(rootGui, props)
         { Title = "Close", Variant = "Secondary", Callback = function() end }
     }
     
-    local function isDismissButton(b)
+    local function isDismissButton(b: PopupButton): boolean
         local t = (b.Title or ""):lower()
         return t:find("cancel") ~= nil 
             or t:find("close") ~= nil 
@@ -4124,7 +4248,7 @@ function Popup.Show(rootGui, props)
             or b.Variant == "Secondary"
     end
     
-    local function createButton(btnData, alignment)
+    local function createButton(btnData: PopupButton, alignment: string?)
         local btn = Instance.new("TextButton")
         btn.Name = "Button_" .. btnData.Title
         btn.Size = UDim2.new(0, 90, 1, 0)
@@ -4248,10 +4372,13 @@ function Popup.Show(rootGui, props)
 end
 
 return Popup
-
 end
 
 _MODULES['Components/Dialog'] = function()
+--[=[
+    Sodium UI - Components/Dialog.luau
+    Premium modal confirmation & alert dialog system with backdrop blur and smooth scale animations.
+]=]
 
 local TweenService = game:GetService("TweenService")
 local Theme = _require("Core/Theme")
@@ -4260,7 +4387,20 @@ local Icons = _require("Core/Icons")
 
 local Dialog = {}
 
-function Dialog.Show(parent, props)
+export type DialogButton = {
+    Title: string,
+    Style: string?, -- "Default" | "Primary" | "Danger"
+    Callback: (() -> ())?,
+}
+
+export type DialogProps = {
+    Title: string,
+    Content: string,
+    Icon: string?,
+    Buttons: { DialogButton }?,
+}
+
+function Dialog.Show(parent: Instance, props: DialogProps)
     local targetParent = parent
     if parent:IsA("ScreenGui") then
         for _, child in ipairs(parent:GetChildren()) do
@@ -4422,7 +4562,7 @@ function Dialog.Show(parent, props)
         }
     end
     
-    local function isDismissButton(b)
+    local function isDismissButton(b: DialogButton): boolean
         local t = (b.Title or ""):lower()
         return t:find("cancel") ~= nil 
             or t:find("close") ~= nil 
@@ -4453,7 +4593,7 @@ function Dialog.Show(parent, props)
         end)
     end
     
-    local function createButton(bData, alignment)
+    local function createButton(bData: DialogButton, alignment: string?)
         local btn = Instance.new("TextButton")
         btn.Name = "Btn_" .. bData.Title
         btn.Size = UDim2.new(0, 84, 1, 0)
@@ -4604,10 +4744,13 @@ function Dialog.Show(parent, props)
 end
 
 return Dialog
-
 end
 
 _MODULES['Components/Loading'] = function()
+--[=[
+    Sodium UI - Components/Loading.luau
+    Standalone obsidian-amethyst modal progress loader with spring-damped bar and transition effects.
+]=]
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -4621,8 +4764,16 @@ local Container = _require("Core/Container")
 local Loading = {}
 Loading.__index = Loading
 
-function Loading.new(rawProps)
-    local props = rawProps or {}
+export type LoadingProps = {
+    Title: string?,
+    Subtitle: string?,
+    Icon: string?,
+    Progress: number?,
+    Status: string?,
+}
+
+function Loading.new(rawProps: LoadingProps?)
+    local props: LoadingProps = rawProps or {}
     local self = setmetatable({}, Loading)
     
     self.ContainerManager = Container.new("Loading")
@@ -4799,7 +4950,7 @@ function Loading.new(rawProps)
     return self
 end
 
-function Loading:SetProgress(percent, statusText)
+function Loading:SetProgress(percent: number, statusText: string?)
     local clamped = math.clamp(percent, 0, 1)
     Tweener.Tween(self.FillBar, Tweener.Info.Smooth, {
         Size = UDim2.new(clamped, 0, 1, 0)
@@ -4811,11 +4962,11 @@ function Loading:SetProgress(percent, statusText)
     end
 end
 
-function Loading:SetStatus(statusText)
+function Loading:SetStatus(statusText: string)
     self.StatusLabel.Text = statusText
 end
 
-function Loading:Finish(onComplete)
+function Loading:Finish(onComplete: (() -> ())?)
     self:SetProgress(1.0, "Ready!")
     task.delay(0.3, function()
         if not self.Modal or not self.Modal.Parent then
@@ -4851,10 +5002,14 @@ function Loading:Destroy()
 end
 
 return Loading
-
 end
 
 _MODULES['Components/KeyCheck'] = function()
+--[=[
+    Sodium UI - Components/KeyCheck.luau
+    Obsidian Amethyst standalone authentication window with JNKIE Ultimate SDK,
+    clipboard paste, remember-key toggle, rate limiting, and 4-state status badge.
+]=]
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -4869,8 +5024,22 @@ local Container = _require("Core/Container")
 local KeyCheck = {}
 KeyCheck.__index = KeyCheck
 
+export type KeyCheckProps = {
+    Title: string?,
+    Subtitle: string?,
+    Service: string?,
+    Identifier: string?,
+    Provider: string?,
+    SaveKey: boolean?,
+    SaveFileName: string?,
+    GetKeyUrl: string?,
+    BuyUrl: string?,
+    DiscordUrl: string?,
+    OnSuccess: ((key: string, data: any?) -> ())?,
+}
+
 -- Safe time function
-local function getSafeTimestamp()
+local function getSafeTimestamp(): number
     local t = os.time()
     if t and t > 1000000000 then return t end
     local s, st = pcall(function() return math.floor(workspace:GetServerTimeNow()) end)
@@ -4878,19 +5047,42 @@ local function getSafeTimestamp()
     return math.floor(tick())
 end
 
+-- Safe executor environment accessor
+local function getExecutorFunc(name: string): any
+    local genv = (type(getgenv) == "function" and getgenv()) or nil
+    if genv and genv[name] ~= nil then return genv[name] end
+    local s, val = pcall(function() return getfenv()[name] end)
+    if s and val ~= nil then return val end
+    return nil
+end
+
 -- Executor file helpers
-local function safeWriteFile(filename, content)
-    local writef = rawget(getfenv(), "writefile")
+local function safeWriteFile(filename: string, content: string): boolean
+    local writef = getExecutorFunc("writefile")
     if type(writef) == "function" then
+        local makef = getExecutorFunc("makefolder")
+        if type(makef) == "function" then
+            local clean = filename:gsub("\\", "/")
+            local parts = string.split(clean, "/")
+            if #parts > 1 then
+                local currentPath = ""
+                for i = 1, #parts - 1 do
+                    if #parts[i] > 0 then
+                        currentPath = if currentPath == "" then parts[i] else (currentPath .. "/" .. parts[i])
+                        pcall(makef, currentPath)
+                    end
+                end
+            end
+        end
         local s, _ = pcall(writef, filename, content)
         return s
     end
     return false
 end
 
-local function safeReadFile(filename)
-    local isf = rawget(getfenv(), "isfile")
-    local readf = rawget(getfenv(), "readfile")
+local function safeReadFile(filename: string): string?
+    local isf = getExecutorFunc("isfile")
+    local readf = getExecutorFunc("readfile")
     if type(isf) == "function" and type(readf) == "function" then
         local s1, exists = pcall(isf, filename)
         if s1 and exists then
@@ -4899,22 +5091,29 @@ local function safeReadFile(filename)
                 return content
             end
         end
+    elseif type(readf) == "function" then
+        local s2, content = pcall(readf, filename)
+        if s2 and type(content) == "string" then
+            return content
+        end
     end
     return nil
 end
 
-local function safeDeleteFile(filename)
-    local isf = rawget(getfenv(), "isfile")
-    local delf = rawget(getfenv(), "delfile")
+local function safeDeleteFile(filename: string)
+    local isf = getExecutorFunc("isfile")
+    local delf = getExecutorFunc("delfile")
     if type(isf) == "function" and type(delf) == "function" then
         pcall(function()
             if isf(filename) then delf(filename) end
         end)
+    elseif type(delf) == "function" then
+        pcall(delf, filename)
     end
 end
 
-local function safeSetClipboard(str)
-    local setclip = rawget(getfenv(), "setclipboard") or rawget(getfenv(), "toclipboard")
+local function safeSetClipboard(str: string): boolean
+    local setclip = getExecutorFunc("setclipboard") or getExecutorFunc("toclipboard")
     if type(setclip) == "function" then
         local s, _ = pcall(setclip, str)
         return s
@@ -4922,8 +5121,8 @@ local function safeSetClipboard(str)
     return false
 end
 
-local function safeGetClipboard()
-    local getclip = rawget(getfenv(), "getclipboard")
+local function safeGetClipboard(): string?
+    local getclip = getExecutorFunc("getclipboard")
     if type(getclip) == "function" then
         local s, res = pcall(getclip)
         if s and type(res) == "string" then
@@ -4934,7 +5133,7 @@ local function safeGetClipboard()
 end
 
 -- JNKIE SDK Loader with Resilient Mock Fallback (Compliant with docs.jnkie.com)
-local function loadJunkieSDK(serviceName, identifier, provider)
+local function loadJunkieSDK(serviceName: string, identifier: string, provider: string): any
     local junkieObj = nil
     local success, _ = pcall(function()
         local sdkCode = game:HttpGet("https://jnkie.com/sdk/library.lua")
@@ -5022,14 +5221,14 @@ local function loadJunkieSDK(serviceName, identifier, provider)
     return junkieObj
 end
 
-function KeyCheck.new(rawProps)
-    local props = rawProps or {}
+function KeyCheck.new(rawProps: KeyCheckProps?)
+    local props: KeyCheckProps = rawProps or {}
     local self = setmetatable({}, KeyCheck)
     
     local saveFileName = props.SaveFileName or "Sodium_SavedKey.json"
-    local rememberKey = if props.SaveKey ~= nil then props.SaveKey else (if props .RememberKey ~= nil then props .RememberKey else true)
-    local serviceName = props.Service or props .ServiceName or "Sodium Hub"
-    local identifier = props.Identifier or props .UserId or props .Id or "sodium-auth"
+    local rememberKey = if props.SaveKey ~= nil then props.SaveKey else (if (props :: any).RememberKey ~= nil then (props :: any).RememberKey else true)
+    local serviceName = props.Service or (props :: any).ServiceName or "Sodium Hub"
+    local identifier = props.Identifier or (props :: any).UserId or (props :: any).Id or "sodium-auth"
     local provider = props.Provider or "Mixed"
     
     self.Junkie = loadJunkieSDK(serviceName, identifier, provider)
@@ -5040,13 +5239,18 @@ function KeyCheck.new(rawProps)
     -- Check for cached key for auto-verify
     local cachedKey = nil
     local cachedJson = safeReadFile(saveFileName)
-    if cachedJson then
-        pcall(function()
-            local decoded = HttpService:JSONDecode(cachedJson)
-            if decoded and type(decoded.key) == "string" and #decoded.key > 0 then
-                cachedKey = decoded.key
-            end
+    if cachedJson and #cachedJson > 0 then
+        local s, decoded = pcall(function()
+            return HttpService:JSONDecode(cachedJson)
         end)
+        if s and type(decoded) == "table" and type(decoded.key) == "string" and #decoded.key > 0 then
+            cachedKey = decoded.key
+        else
+            local rawTrimmed = cachedJson:gsub("^%s+", ""):gsub("%s+$", "")
+            if #rawTrimmed > 0 and not string.find(rawTrimmed, "^{") then
+                cachedKey = rawTrimmed
+            end
+        end
     end
     
     self.ContainerManager = Container.new("KeyCheck")
@@ -5368,7 +5572,7 @@ function KeyCheck.new(rawProps)
     statusText.Parent = statusRow
     Theme.Bind(statusText, "TextColor3", "Placeholder")
     
-    local function setStatusState(state, customMsg)
+    local function setStatusState(state: string, customMsg: string?)
         if state == "Ready" then
             statusDot.BackgroundColor3 = Theme.GetToken("Placeholder")
             statusText.TextColor3 = Theme.GetToken("Placeholder")
@@ -5452,7 +5656,7 @@ function KeyCheck.new(rawProps)
     subList.Padding = UDim.new(0, 8)
     subList.Parent = subRow
     
-    local function createSubButton(name, iconName, text, order)
+    local function createSubButton(name: string, iconName: string, text: string, order: number): TextButton
         local btn = Instance.new("TextButton")
         btn.Name = name
         btn.Size = UDim2.new(0.333, -5, 1, 0)
@@ -5554,7 +5758,7 @@ function KeyCheck.new(rawProps)
     end)
     
     -- Verification Core Routine
-    local function verifyKey(inputKey, isSilent)
+    local function verifyKey(inputKey: string, isSilent: boolean?)
         if self.IsVerifying then return end
         local cleanKey = inputKey:gsub("^%s+", ""):gsub("%s+$", "")
         -- Clean out non-breaking spaces, zero-width spaces, and enclosing quotes
@@ -5626,7 +5830,7 @@ function KeyCheck.new(rawProps)
                 redLabel.Text = "Unlocked!"
                 
                 -- Official Jnkie Handshake: SCRIPT_KEY environment variable
-                local genv = (rawget(getfenv(), "getgenv") and getgenv()) or (rawget(getfenv(), "_G"))
+                local genv = (type(getgenv) == "function" and getgenv()) or (rawget(getfenv(), "_G") :: any)
                 if genv then
                     genv.SCRIPT_KEY = cleanKey
                 end
@@ -5742,10 +5946,13 @@ function KeyCheck:Destroy()
 end
 
 return KeyCheck
-
 end
 
 _MODULES['Components/TabSection'] = function()
+--[=[
+    Sodium UI - Components/TabSection.luau
+    Sidebar Collapsible Category Header Groups with smooth accordion animation.
+]=]
 
 local Theme = _require("Core/Theme")
 local Tweener = _require("Core/Tweener")
@@ -5756,7 +5963,13 @@ local RunService = game:GetService("RunService")
 local TabSection = {}
 TabSection.__index = TabSection
 
-function TabSection.new(window, parent, props)
+export type TabSectionProps = {
+    Title: string,
+    Icon: string?,
+    Opened: boolean?,
+}
+
+function TabSection.new(window: any, parent: Instance, props: TabSectionProps)
     local self = setmetatable({}, TabSection)
     self.Window = window
     self.Title = props.Title
@@ -5926,7 +6139,7 @@ function TabSection:Destroy()
     end
 end
 
-function TabSection:Toggle(opened)
+function TabSection:Toggle(opened: boolean?)
     if opened ~= nil then
         self.Opened = opened
     else
@@ -6044,7 +6257,7 @@ function TabSection:Toggle(opened)
     end
 end
 
-function TabSection:Tab(props)
+function TabSection:Tab(props: any)
     assert(self.Window, "[SodiumUI.TabSection] Window reference is nil")
     local tab = self.Window:Tab(props, self)
     table.insert(self.Tabs, tab)
@@ -6052,17 +6265,24 @@ function TabSection:Tab(props)
 end
 
 return TabSection
-
 end
 
 _MODULES['Elements/Divider'] = function()
+--[=[
+    Sodium UI - Elements/Divider.luau
+    Clean horizontal separator with optional centered text label.
+]=]
 
 local Theme = _require("Core/Theme")
 
 local Divider = {}
 Divider.__index = Divider
 
-function Divider.new(parent, props)
+export type DividerProps = {
+    Title: string?,
+}
+
+function Divider.new(parent: Instance, props: DividerProps?)
     local self = setmetatable({}, Divider)
     local title = props and props.Title
     
@@ -6138,10 +6358,13 @@ function Divider:Destroy()
 end
 
 return Divider
-
 end
 
 _MODULES['Elements/Button'] = function()
+--[=[
+    Sodium UI - Elements/Button.luau
+    Action trigger with physical micro-press feedback (scale: 0.97) and hover lift.
+]=]
 
 local Theme = _require("Core/Theme")
 local Tweener = _require("Core/Tweener")
@@ -6150,7 +6373,18 @@ local Icons = _require("Core/Icons")
 local Button = {}
 Button.__index = Button
 
-function Button.new(parent, props)
+export type ButtonProps = {
+    Title: string,
+    Desc: string?,
+    Icon: string?,
+    Color: Color3?,
+    Justify: string?, -- "Between", "Center", "Left", "Right"
+    IconAlign: string?, -- "Left", "Right"
+    Locked: boolean?,
+    Callback: (() -> ())?,
+}
+
+function Button.new(parent: Instance, props: any)
     local titleText = props.Title or props.Name or "Button"
     local self = setmetatable({}, Button)
     self.Locked = props.Locked or false
@@ -6203,7 +6437,7 @@ function Button.new(parent, props)
     self._connections = {}
     
     -- Icon
-    local iconLabel = nil
+    local iconLabel: ImageLabel? = nil
     local iconWidth = 0
     local isRightIcon = props.IconAlign == "Right"
     if props.Icon and props.Icon ~= "" then
@@ -6246,7 +6480,7 @@ function Button.new(parent, props)
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = btn
     
-    local descLabel = nil
+    local descLabel: TextLabel? = nil
     if isDesc then
         descLabel = Instance.new("TextLabel")
         descLabel.Name = "Desc"
@@ -6291,11 +6525,11 @@ function Button.new(parent, props)
     return self
 end
 
-function Button:SetTitle(title)
+function Button:SetTitle(title: string)
     self.TitleLabel.Text = title
 end
 
-function Button:SetDesc(desc)
+function Button:SetDesc(desc: string)
     if self.DescLabel then
         self.DescLabel.Text = desc
     end
@@ -6326,10 +6560,14 @@ function Button:Destroy()
 end
 
 return Button
-
 end
 
 _MODULES['Elements/Toggle'] = function()
+--[=[
+    Sodium UI - Elements/Toggle.luau
+    Stateful switch with animated thumb slider and ConfigEngine Flag registration.
+    Refined: ApplyStrokeMode = Border, polished typography, and smooth thumb animation.
+]=]
 
 local Theme = _require("Core/Theme")
 local Tweener = _require("Core/Tweener")
@@ -6338,7 +6576,17 @@ local Icons = _require("Core/Icons")
 local Toggle = {}
 Toggle.__index = Toggle
 
-function Toggle.new(parent, configEngine, props)
+export type ToggleProps = {
+    Title: string,
+    Desc: string?,
+    Icon: string?,
+    Value: boolean?,
+    Flag: string?,
+    Locked: boolean?,
+    Callback: ((state: boolean) -> ())?,
+}
+
+function Toggle.new(parent: Instance, configEngine: any, props: any)
     local titleText = props.Title or props.Name or "Toggle"
     local initialVal = if props.Value ~= nil then props.Value elseif props.Default ~= nil then props.Default else false
     
@@ -6409,7 +6657,7 @@ function Toggle.new(parent, configEngine, props)
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = triggerBtn
     
-    local descLabel = nil
+    local descLabel: TextLabel? = nil
     if isDesc then
         descLabel = Instance.new("TextLabel")
         descLabel.Name = "Desc"
@@ -6504,7 +6752,7 @@ function Toggle.new(parent, configEngine, props)
     return self
 end
 
-function Toggle:Set(state, skipCallback)
+function Toggle:Set(state: boolean, skipCallback: boolean?)
     self.Value = state
     
     local targetPos = if self.Value then UDim2.new(1, -10, 0.5, 0) else UDim2.new(0, 10, 0.5, 0)
@@ -6532,15 +6780,15 @@ function Toggle:Set(state, skipCallback)
     end
 end
 
-function Toggle:Get()
+function Toggle:Get(): boolean
     return self.Value
 end
 
-function Toggle:SetTitle(title)
+function Toggle:SetTitle(title: string)
     self.TitleLabel.Text = title
 end
 
-function Toggle:SetDesc(desc)
+function Toggle:SetDesc(desc: string)
     if self.DescLabel then
         self.DescLabel.Text = desc
     end
@@ -6567,10 +6815,14 @@ function Toggle:Destroy()
 end
 
 return Toggle
-
 end
 
 _MODULES['Elements/Slider'] = function()
+--[=[
+    Sodium UI - Elements/Slider.luau
+    Touch & Mouse draggable slider with integer/float snapping and numeric value badge.
+    Refined: Compact control area (112px) giving maximum width to Title, zero truncation.
+]=]
 
 local UserInputService = game:GetService("UserInputService")
 local Theme = _require("Core/Theme")
@@ -6580,7 +6832,23 @@ local Icons = _require("Core/Icons")
 local Slider = {}
 Slider.__index = Slider
 
-function Slider.new(parent, configEngine, props)
+export type SliderProps = {
+    Title: string,
+    Desc: string?,
+    Icon: string?,
+    Step: number?,
+    Suffix: string?,
+    Value: {
+        Min: number,
+        Max: number,
+        Default: number,
+    },
+    Flag: string?,
+    Locked: boolean?,
+    Callback: ((val: number) -> ())?,
+}
+
+function Slider.new(parent: Instance, configEngine: any, props: any)
     local titleText = props.Title or props.Name or "Slider"
     local valTable = if type(props.Value) == "table" then props.Value else {}
     local minVal = props.Min or valTable.Min or 0
@@ -6652,7 +6920,7 @@ function Slider.new(parent, configEngine, props)
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = container
     
-    local descLabel = nil
+    local descLabel: TextLabel? = nil
     if isDesc then
         descLabel = Instance.new("TextLabel")
         descLabel.Name = "Desc"
@@ -6791,7 +7059,7 @@ function Slider.new(parent, configEngine, props)
     
     Tweener.BindHoverLift(container, stroke)
     
-    local function snap(rawVal)
+    local function snap(rawVal: number): number
         local stepped = math.floor((rawVal - self.Min) / self.Step + 0.5) * self.Step + self.Min
         return math.clamp(stepped, self.Min, self.Max)
     end
@@ -6800,7 +7068,7 @@ function Slider.new(parent, configEngine, props)
     local allowDecimal = (self.Step % 1 ~= 0)
     local isEditing = false
     
-    local function formatValue(val)
+    local function formatValue(val: number): string
         if self.Step % 1 == 0 then
             return string.format("%d", math.round(val))
         else
@@ -6860,7 +7128,7 @@ function Slider.new(parent, configEngine, props)
         badgeInput.Text = formatValue(self.Value) .. self.Suffix
     end))
     
-    local function updateFromInput(inputPos)
+    local function updateFromInput(inputPos: Vector2)
         local trackAbsX = track.AbsolutePosition.X
         local trackWidth = track.AbsoluteSize.X
         if trackWidth <= 0 then return end
@@ -6872,7 +7140,7 @@ function Slider.new(parent, configEngine, props)
         self:Set(snapped, false, false)
     end
     
-    local function setDragging(dragging)
+    local function setDragging(dragging: boolean)
         if self.IsDragging == dragging then return end
         self.IsDragging = dragging
         if dragging then
@@ -6884,7 +7152,7 @@ function Slider.new(parent, configEngine, props)
         end
     end
 
-    local inputChangedConn = nil
+    local inputChangedConn: any = nil
     local function stopDragging()
         if inputChangedConn then
             inputChangedConn:Disconnect()
@@ -6936,7 +7204,7 @@ function Slider.new(parent, configEngine, props)
     return self
 end
 
-function Slider:Set(newVal, skipCallback, animate)
+function Slider:Set(newVal: number, skipCallback: boolean?, animate: boolean?)
     if self._isUpdating then return end
     self._isUpdating = true
     
@@ -6982,15 +7250,15 @@ function Slider:Set(newVal, skipCallback, animate)
     self._isUpdating = false
 end
 
-function Slider:Get()
+function Slider:Get(): number
     return self.Value
 end
 
-function Slider:SetTitle(title)
+function Slider:SetTitle(title: string)
     self.TitleLabel.Text = title
 end
 
-function Slider:SetDesc(desc)
+function Slider:SetDesc(desc: string)
     if self.DescLabel then
         self.DescLabel.Text = desc
     end
@@ -7034,10 +7302,14 @@ function Slider:Destroy()
 end
 
 return Slider
-
 end
 
 _MODULES['Elements/Dropdown'] = function()
+--[=[
+    Sodium UI - Elements/Dropdown.luau
+    Popover menu supporting Single-Select & Multi-Select with screen-edge flipping.
+    Refined: Dynamic Parent Card ZIndex elevation preventing any card from covering popovers.
+]=]
 
 local UserInputService = game:GetService("UserInputService")
 local Theme = _require("Core/Theme")
@@ -7047,9 +7319,24 @@ local Icons = _require("Core/Icons")
 local Dropdown = {}
 Dropdown.__index = Dropdown
 
-local currentOpenDropdown = nil
+local currentOpenDropdown: any = nil
 
-function Dropdown.new(parent, configEngine, props, parentCard)
+export type DropdownItem = string | { Title: string, Icon: string? }
+
+export type DropdownProps = {
+    Title: string,
+    Desc: string?,
+    Icon: string?,
+    Values: { DropdownItem },
+    Value: (string | { string })?,
+    Multi: boolean?,
+    AllowNone: boolean?,
+    Flag: string?,
+    Locked: boolean?,
+    Callback: ((selected: any) -> ())?,
+}
+
+function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCard: GuiObject?)
     local titleText = props.Title or props.Name or "Dropdown"
     local rawVal = if props.Value ~= nil then props.Value else props.Default
     
@@ -7068,7 +7355,7 @@ function Dropdown.new(parent, configEngine, props, parentCard)
     if self.Multi then
         self.Selected = if type(rawVal) == "table" then rawVal else (rawVal and { rawVal } or {})
     else
-        self.Selected = if type(rawVal) == "string" then rawVal else (self.Values[1] and (type(self.Values[1]) == "table" and self.Values[1] .Title or self.Values[1]) or "")
+        self.Selected = if type(rawVal) == "string" then rawVal else (self.Values[1] and (type(self.Values[1]) == "table" and (self.Values[1] :: any).Title or self.Values[1]) or "")
     end
     
     local isDesc = props.Desc and props.Desc ~= ""
@@ -7113,7 +7400,7 @@ function Dropdown.new(parent, configEngine, props, parentCard)
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = container
     
-    local descLabel = nil
+    local descLabel: TextLabel? = nil
     if isDesc then
         descLabel = Instance.new("TextLabel")
         descLabel.Name = "Desc"
@@ -7271,8 +7558,8 @@ function Dropdown.new(parent, configEngine, props, parentCard)
         end
         
         for i, valItem in ipairs(self.Values) do
-            local itemTitle = if type(valItem) == "table" then valItem .Title else tostring(valItem)
-            local itemIcon = if type(valItem) == "table" then valItem .Icon else nil
+            local itemTitle = if type(valItem) == "table" then (valItem :: any).Title else tostring(valItem)
+            local itemIcon = if type(valItem) == "table" then (valItem :: any).Icon else nil
             
             local optBtn = Instance.new("TextButton")
             optBtn.Name = "Opt_" .. itemTitle
@@ -7530,7 +7817,7 @@ function Dropdown:Close()
     end)
 end
 
-function Dropdown:Set(val, skipCallback)
+function Dropdown:Set(val: any, skipCallback: boolean?)
     if self.Multi then
         self.Selected = if type(val) == "table" then val else { tostring(val) }
     else
@@ -7544,7 +7831,7 @@ function Dropdown:Set(val, skipCallback)
     end
 end
 
-function Dropdown:Clear(skipCallback)
+function Dropdown:Clear(skipCallback: boolean?)
     if self.Multi then
         self.Selected = {}
     else
@@ -7558,21 +7845,21 @@ function Dropdown:Clear(skipCallback)
 end
 Dropdown.ClearDropdown = Dropdown.Clear
 
-function Dropdown:Get()
+function Dropdown:Get(): any
     return self.Selected
 end
 
-function Dropdown:Refresh(newValues)
+function Dropdown:Refresh(newValues: { DropdownItem })
     self.Values = newValues
     self:RebuildOptions()
     self.UpdateDisplay()
 end
 
-function Dropdown:SetTitle(title)
+function Dropdown:SetTitle(title: string)
     self.TitleLabel.Text = title
 end
 
-function Dropdown:SetDesc(desc)
+function Dropdown:SetDesc(desc: string)
     if self.DescLabel then
         self.DescLabel.Text = desc
     end
@@ -7605,10 +7892,13 @@ function Dropdown:Destroy()
 end
 
 return Dropdown
-
 end
 
 _MODULES['Elements/Input'] = function()
+--[=[
+    Sodium UI - Elements/Input.luau
+    Text input field with placeholder, clear button, focus glow, and enter submit callback.
+]=]
 
 local Theme = _require("Core/Theme")
 local Tweener = _require("Core/Tweener")
@@ -7617,7 +7907,19 @@ local Icons = _require("Core/Icons")
 local Input = {}
 Input.__index = Input
 
-function Input.new(parent, configEngine, props)
+export type InputProps = {
+    Title: string,
+    Desc: string?,
+    Icon: string?,
+    Value: string?,
+    Placeholder: string?,
+    ClearTextOnFocus: boolean?,
+    Flag: string?,
+    Locked: boolean?,
+    Callback: ((text: string) -> ())?,
+}
+
+function Input.new(parent: Instance, configEngine: any, props: any)
     local titleText = props.Title or props.Name or "Input"
     local rawVal = if props.Value ~= nil then props.Value elseif props.Default ~= nil then props.Default else ""
 
@@ -7684,7 +7986,7 @@ function Input.new(parent, configEngine, props)
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = container
     
-    local descLabel = nil
+    local descLabel: TextLabel? = nil
     if isDesc then
         descLabel = Instance.new("TextLabel")
         descLabel.Name = "Desc"
@@ -7831,7 +8133,7 @@ function Input.new(parent, configEngine, props)
     return self
 end
 
-function Input:Set(text, skipCallback)
+function Input:Set(text: string, skipCallback: boolean?)
     self.Value = text
     self.TextBox.Text = text
     self.ClearBtn.Visible = text ~= ""
@@ -7840,20 +8142,20 @@ function Input:Set(text, skipCallback)
     end
 end
 
-function Input:Get()
+function Input:Get(): string
     return self.Value
 end
 
-function Input:SetPlaceholder(placeholder)
+function Input:SetPlaceholder(placeholder: string)
     self.Placeholder = placeholder
     self.TextBox.PlaceholderText = placeholder
 end
 
-function Input:SetTitle(title)
+function Input:SetTitle(title: string)
     self.TitleLabel.Text = title
 end
 
-function Input:SetDesc(desc)
+function Input:SetDesc(desc: string)
     if self.DescLabel then
         self.DescLabel.Text = desc
     end
@@ -7882,10 +8184,14 @@ function Input:Destroy()
 end
 
 return Input
-
 end
 
 _MODULES['Elements/Keybind'] = function()
+--[=[
+    Sodium UI - Elements/Keybind.luau
+    Dynamic key listener supporting Keyboard and Mouse buttons (M1/M2/M3) with listening badge.
+    Refined: 82px badge width accommodating longer key names like RightBracket.
+]=]
 
 local UserInputService = game:GetService("UserInputService")
 local Theme = _require("Core/Theme")
@@ -7895,7 +8201,17 @@ local Icons = _require("Core/Icons")
 local Keybind = {}
 Keybind.__index = Keybind
 
-function Keybind.new(parent, configEngine, props)
+export type KeybindProps = {
+    Title: string,
+    Desc: string?,
+    Icon: string?,
+    Value: (string | Enum.KeyCode)?,
+    Flag: string?,
+    Locked: boolean?,
+    Callback: ((key: string) -> ())?,
+}
+
+function Keybind.new(parent: Instance, configEngine: any, props: any)
     local titleText = props.Title or props.Name or "Keybind"
     local rawVal = if props.Value ~= nil then props.Value elseif props.Default ~= nil then props.Default else nil
 
@@ -7960,7 +8276,7 @@ function Keybind.new(parent, configEngine, props)
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = container
     
-    local descLabel = nil
+    local descLabel: TextLabel? = nil
     if isDesc then
         descLabel = Instance.new("TextLabel")
         descLabel.Name = "Desc"
@@ -8053,8 +8369,8 @@ function Keybind.new(parent, configEngine, props)
         end
     end)
     
-    local pulseThread = nil
-    local function endListening(selectedKey)
+    local pulseThread: any = nil
+    local function endListening(selectedKey: string?)
         if self._listenConn then
             self._listenConn:Disconnect()
             self._listenConn = nil
@@ -8077,7 +8393,7 @@ function Keybind.new(parent, configEngine, props)
     self._endListening = endListening
     
     local function openMobileKeyPicker()
-        local targetParent = nil
+        local targetParent: Instance? = nil
         local cur = container.Parent
         while cur and cur.Parent do
             if cur:IsA("Frame") and cur.Name:find("SodiumWindow") then
@@ -8276,7 +8592,7 @@ function Keybind.new(parent, configEngine, props)
     return self
 end
 
-function Keybind:Set(key, skipCallback)
+function Keybind:Set(key: string, skipCallback: boolean?)
     self.Value = key
     self.BadgeText.Text = self.Value
     if not skipCallback and self.Callback then
@@ -8284,15 +8600,15 @@ function Keybind:Set(key, skipCallback)
     end
 end
 
-function Keybind:Get()
+function Keybind:Get(): string
     return self.Value
 end
 
-function Keybind:SetTitle(title)
+function Keybind:SetTitle(title: string)
     self.TitleLabel.Text = title
 end
 
-function Keybind:SetDesc(desc)
+function Keybind:SetDesc(desc: string)
     if self.DescLabel then
         self.DescLabel.Text = desc
     end
@@ -8322,10 +8638,13 @@ function Keybind:Destroy()
 end
 
 return Keybind
-
 end
 
 _MODULES['Elements/Paragraph'] = function()
+--[=[
+    Sodium UI - Elements/Paragraph.luau
+    Informational card with title, rich description text, and optional action buttons.
+]=]
 
 local Theme = _require("Core/Theme")
 local Tweener = _require("Core/Tweener")
@@ -8334,7 +8653,20 @@ local Icons = _require("Core/Icons")
 local Paragraph = {}
 Paragraph.__index = Paragraph
 
-function Paragraph.new(parent, props)
+export type ParagraphButton = {
+    Title: string,
+    Icon: string?,
+    Callback: (() -> ())?,
+}
+
+export type ParagraphProps = {
+    Title: string,
+    Desc: string,
+    Icon: string?,
+    Buttons: { ParagraphButton }?,
+}
+
+function Paragraph.new(parent: Instance, props: any)
     local titleText = props.Title or props.Name or "Paragraph"
     local descText = props.Desc or props.Content or ""
 
@@ -8522,11 +8854,11 @@ function Paragraph.new(parent, props)
     return self
 end
 
-function Paragraph:SetTitle(title)
+function Paragraph:SetTitle(title: string)
     self.TitleLabel.Text = title
 end
 
-function Paragraph:SetDesc(desc)
+function Paragraph:SetDesc(desc: string)
     self.DescLabel.Text = desc
 end
 
@@ -8539,10 +8871,13 @@ function Paragraph:Destroy()
 end
 
 return Paragraph
-
 end
 
 _MODULES['Components/Section'] = function()
+--[=[
+    Sodium UI - Components/Section.luau
+    Modular Card Container (rounded-2xl) grouping related interactive elements.
+]=]
 
 local Theme = _require("Core/Theme")
 local Tweener = _require("Core/Tweener")
@@ -8553,8 +8888,17 @@ local Divider = _require("Elements/Divider")
 local Section = {}
 Section.__index = Section
 
-function Section.new(parent, configEngine, rawProps)
-    local props = if type(rawProps) == "string" then { Title = rawProps } else (rawProps or {})
+export type SectionProps = {
+    Title: string,
+    Desc: string?,
+    Icon: string?,
+    Collapsible: boolean?,
+    Opened: boolean?,
+    Column: string?,
+}
+
+function Section.new(parent: Instance, configEngine: any, rawProps: any)
+    local props: any = if type(rawProps) == "string" then { Title = rawProps } else (rawProps or {})
     local sectionTitle = props.Title or props.Name or "Section"
     props.Title = sectionTitle
     
@@ -8633,7 +8977,7 @@ function Section.new(parent, configEngine, rawProps)
     title.Parent = header
     Theme.Bind(title, "TextColor3", "TextPrimary")
     
-    local chevron = nil
+    local chevron: ImageLabel? = nil
     if props.Collapsible then
         chevron = Instance.new("ImageLabel")
         chevron.Name = "Chevron"
@@ -8668,7 +9012,7 @@ function Section.new(parent, configEngine, rawProps)
         header.Activated:Connect(function()
             self.Opened = not self.Opened
             elementsContainer.Visible = self.Opened
-            Tweener.Tween(chevron, Tweener.Info.Fast, {
+            Tweener.Tween(chevron :: ImageLabel, Tweener.Info.Fast, {
                 Rotation = if self.Opened then 0 else -90
             })
         end)
@@ -8681,54 +9025,54 @@ function Section.new(parent, configEngine, rawProps)
     return self
 end
 
-function Section:Button(props)
+function Section:Button(props: any)
     local Button = _require("Elements/Button")
     return Button.new(self.ElementsContainer, props)
 end
 
-function Section:Toggle(props)
+function Section:Toggle(props: any)
     local Toggle = _require("Elements/Toggle")
     return Toggle.new(self.ElementsContainer, self.ConfigEngine, props)
 end
 
-function Section:Slider(props)
+function Section:Slider(props: any)
     local Slider = _require("Elements/Slider")
     return Slider.new(self.ElementsContainer, self.ConfigEngine, props)
 end
 
-function Section:Dropdown(props)
+function Section:Dropdown(props: any)
     local Dropdown = _require("Elements/Dropdown")
     return Dropdown.new(self.ElementsContainer, self.ConfigEngine, props, self.Card)
 end
 
-function Section:Input(props)
+function Section:Input(props: any)
     local Input = _require("Elements/Input")
     return Input.new(self.ElementsContainer, self.ConfigEngine, props)
 end
 
-function Section:Keybind(props)
+function Section:Keybind(props: any)
     local Keybind = _require("Elements/Keybind")
     return Keybind.new(self.ElementsContainer, self.ConfigEngine, props)
 end
 
-function Section:Paragraph(props)
+function Section:Paragraph(props: any)
     local Paragraph = _require("Elements/Paragraph")
     return Paragraph.new(self.ElementsContainer, props)
 end
 
-function Section:Divider(props)
+function Section:Divider(props: any)
     local p = if type(props) == "string" then { Title = props } else (props or {})
     return Divider.new(self.ElementsContainer, p)
 end
 
-function Section:Space(height)
+function Section:Space(height: number?)
     return Primitives.Space(self.ElementsContainer, height)
 end
 
-function Section:SetTitle(newTitle)
+function Section:SetTitle(newTitle: string)
     local header = self.Card:FindFirstChild("Header")
     if header then
-        local title = header:FindFirstChild("Title")
+        local title = header:FindFirstChild("Title") :: TextLabel
         if title then
             title.Text = newTitle
         end
@@ -8758,10 +9102,14 @@ Section.CreateDivider = Section.Divider
 Section.AddDivider = Section.Divider
 
 return Section
-
 end
 
 _MODULES['Components/Tab'] = function()
+--[=[
+    Sodium UI - Components/Tab.luau
+    Tab page layout supporting single-column vertical flow and dual-column grid (Karpiware style).
+    Refined: Explicit non-overflowing column sizing (1, -34), eliminating right-edge clipping.
+]=]
 
 local UserInputService = game:GetService("UserInputService")
 local Theme = _require("Core/Theme")
@@ -8772,8 +9120,15 @@ local Section = _require("Components/Section")
 local Tab = {}
 Tab.__index = Tab
 
-function Tab.new(window, sidebarList, contentContainer, configEngine, rawProps)
-    local props = if type(rawProps) == "string" then { Title = rawProps } else (rawProps or {})
+export type TabProps = {
+    Title: string,
+    Icon: string?,
+    Columns: number?, -- 1 or 2
+    Locked: boolean?,
+}
+
+function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance, configEngine: any, rawProps: any)
+    local props: any = if type(rawProps) == "string" then { Title = rawProps } else (rawProps or {})
     local tabTitle = props.Title or props.Name or "Tab"
     props.Title = tabTitle
 
@@ -8812,7 +9167,7 @@ function Tab.new(window, sidebarList, contentContainer, configEngine, rawProps)
     self._hoverScaleTween = nil
     
     local iconOffset = 0
-    local iconLabel = nil
+    local iconLabel: ImageLabel? = nil
     if props.Icon and props.Icon ~= "" then
         iconLabel = Instance.new("ImageLabel")
         iconLabel.Name = "Icon"
@@ -9046,7 +9401,7 @@ function Tab:Destroy()
     end
 end
 
-function Tab:Select(animated)
+function Tab:Select(animated: boolean?)
     if self.Window and self.Window.CurrentTab ~= self then
         self.Window:SelectTab(self)
         return
@@ -9099,7 +9454,7 @@ function Tab:Select(animated)
     end
 end
 
-function Tab:Deselect(animated)
+function Tab:Deselect(animated: boolean?)
     self.Active = false
     
     if self._pageTween then
@@ -9136,12 +9491,13 @@ function Tab:Deselect(animated)
     end
 end
 
-function Tab:AddConfigSection(props)
+
+function Tab:AddConfigSection(props: any?)
     return self.Window:AddConfigSection(self, props)
 end
 
-function Tab:Section(rawProps)
-    local props = if type(rawProps) == "string" then { Title = rawProps } else (rawProps or {})
+function Tab:Section(rawProps: any)
+    local props: any = if type(rawProps) == "string" then { Title = rawProps } else (rawProps or {})
     props.Title = props.Title or props.Name or "Section"
 
     local targetParent = self.SingleColumn
@@ -9163,35 +9519,35 @@ function Tab:_getOrCreateDefaultSection()
     return self._defaultSection
 end
 
-function Tab:Button(props)
+function Tab:Button(props: any)
     return self:_getOrCreateDefaultSection():Button(props)
 end
 
-function Tab:Toggle(props)
+function Tab:Toggle(props: any)
     return self:_getOrCreateDefaultSection():Toggle(props)
 end
 
-function Tab:Slider(props)
+function Tab:Slider(props: any)
     return self:_getOrCreateDefaultSection():Slider(props)
 end
 
-function Tab:Dropdown(props)
+function Tab:Dropdown(props: any)
     return self:_getOrCreateDefaultSection():Dropdown(props)
 end
 
-function Tab:Input(props)
+function Tab:Input(props: any)
     return self:_getOrCreateDefaultSection():Input(props)
 end
 
-function Tab:Keybind(props)
+function Tab:Keybind(props: any)
     return self:_getOrCreateDefaultSection():Keybind(props)
 end
 
-function Tab:Paragraph(props)
+function Tab:Paragraph(props: any)
     return self:_getOrCreateDefaultSection():Paragraph(props)
 end
 
-function Tab:Divider(props)
+function Tab:Divider(props: any)
     return self:_getOrCreateDefaultSection():Divider(props)
 end
 
@@ -9216,10 +9572,14 @@ Tab.CreateDivider = Tab.Divider
 Tab.AddDivider = Tab.Divider
 
 return Tab
-
 end
 
 _MODULES['Components/Window'] = function()
+--[=[
+    Sodium UI - Components/Window.luau
+    Draggable Window Frame with minimize/close states, sidebar search, and user profile widget.
+    Refined: Seamless rounded corners (zero square edge bleeding), consistent stroke modes.
+]=]
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -9238,7 +9598,23 @@ local Dialog = _require("Components/Dialog")
 local Window = {}
 Window.__index = Window
 
-function Window.new(containerManager, configEngine, props)
+export type WindowProps = {
+    Title: string,
+    Icon: string?,
+    Author: string?,
+    Folder: string?,
+    Size: UDim2?,
+    SideBarWidth: number?,
+    ToggleKey: Enum.KeyCode?,
+    HideSearchBar: boolean?,
+    User: {
+        Enabled: boolean?,
+        Anonymous: boolean?,
+        Callback: (() -> ())?,
+    }?,
+}
+
+function Window.new(containerManager: any, configEngine: any, props: WindowProps)
     local self = setmetatable({}, Window)
     self.ContainerManager = containerManager
     self.ConfigEngine = configEngine
@@ -9255,7 +9631,7 @@ function Window.new(containerManager, configEngine, props)
     self._indicatorTween = nil
     local initialKey = props.ToggleKey or Enum.KeyCode.LeftShift
     if type(initialKey) == "string" then
-        local found = Enum.KeyCode [initialKey]
+        local found = (Enum.KeyCode :: any)[initialKey]
         self.ToggleKey = found or initialKey
     else
         self.ToggleKey = initialKey
@@ -9408,7 +9784,7 @@ function Window.new(containerManager, configEngine, props)
     self.TitleContainer = titleContainer
     
     -- Tag System: Window:Tag({ Title = "v1.0", Icon = "github", Color = Color3... })
-    function self:Tag(tagProps)
+    function self:Tag(tagProps: any)
         local tagTitle = "v1.0"
         local tagIcon = nil
         local tagColor = Color3.fromHex("#30ff6a")
@@ -9462,7 +9838,7 @@ function Window.new(containerManager, configEngine, props)
         badgeLayout.Padding = if hasIcon then UDim.new(0, 4) else UDim.new(0, 0)
         badgeLayout.Parent = tagBadge
         
-        local badgeIcon = nil
+        local badgeIcon: ImageLabel? = nil
         if hasIcon then
             badgeIcon = Instance.new("ImageLabel")
             badgeIcon.Name = "Icon"
@@ -9491,10 +9867,10 @@ function Window.new(containerManager, configEngine, props)
         self._tagBadge = tagBadge
         
         local tagController = {}
-        function tagController:SetTitle(newTitle)
+        function tagController:SetTitle(newTitle: string)
             badgeText.Text = newTitle
         end
-        function tagController:SetColor(newColor)
+        function tagController:SetColor(newColor: Color3)
             tagColor = newColor
             tagBadge.BackgroundColor3 = newColor
             badgeStroke.Color = newColor
@@ -9503,7 +9879,7 @@ function Window.new(containerManager, configEngine, props)
                 badgeIcon.ImageColor3 = newColor
             end
         end
-        function tagController:SetIcon(newIcon)
+        function tagController:SetIcon(newIcon: string)
             if badgeIcon then
                 Icons.Apply(badgeIcon, newIcon)
             end
@@ -9583,7 +9959,7 @@ function Window.new(containerManager, configEngine, props)
     keyText.ZIndex = 5
     keyText.Parent = tagKeyBadge
 
-    local function getSafeTimestamp()
+    local function getSafeTimestamp(): number
         local t = os.time()
         if t and t > 1000000000 then return t end
         local success, serverTime = pcall(function()
@@ -9595,14 +9971,14 @@ function Window.new(containerManager, configEngine, props)
         return math.floor(tick())
     end
 
-    local function formatRemainingTime(seconds)
+    local function formatRemainingTime(seconds: number): string
         local hours = math.floor(seconds / 3600)
         local mins = math.floor((seconds % 3600) / 60)
         local secs = seconds % 60
         return string.format("%02d:%02d:%02d", hours, mins, secs)
     end
 
-    local function applyTagKeyTheme(color, iconName)
+    local function applyTagKeyTheme(color: Color3, iconName: string?)
         tagKeyBadge.BackgroundColor3 = color
         keyStroke.Color = color
         keyIcon.ImageColor3 = color
@@ -9651,7 +10027,7 @@ function Window.new(containerManager, configEngine, props)
         end)
     end
 
-    function self:SetKeyExpiry(expires)
+    function self:SetKeyExpiry(expires: any)
         if type(expires) == "number" and expires < 100000000 then
             self._keyExpires = getSafeTimestamp() + expires
         else
@@ -9660,7 +10036,7 @@ function Window.new(containerManager, configEngine, props)
         startExpiryWorker()
     end
 
-    function self:TagKey(tagKeyProps)
+    function self:TagKey(tagKeyProps: any)
         if not tagKeyProps then
             tagKeyBadge.Visible = false
             return
@@ -9921,11 +10297,11 @@ function Window.new(containerManager, configEngine, props)
         toolsLayout.Parent = sidebarTools
 
         -- Helper to apply icon source (supports numeric asset ID, rbxthumb://, rbxassetid://, or Lucide name)
-        local function applyIconToLabel(imgLabel, iconSource)
+        local function applyIconToLabel(imgLabel: ImageLabel, iconSource: string)
             Icons.ApplyAsset(imgLabel, iconSource)
         end
 
-        local iconConfig = (props.Icons or {})
+        local iconConfig = (props.Icons or {}) :: any
         local currentDiscordIcon = iconConfig.Discord or "send"
         local currentThemeIcon = iconConfig.Theme or "sun"
         local currentProfileIcon = iconConfig.Profile or "hat-glasses"
@@ -10242,7 +10618,7 @@ function Window.new(containerManager, configEngine, props)
         end)
 
         -- Table Config Method: Allows runtime custom icon configuration strictly for Discord, Theme, Profile buttons
-        function self:SetIconConfig(newConfig)
+        function self:SetIconConfig(newConfig: { Discord: string?, Theme: string?, Profile: string? })
             if type(newConfig) ~= "table" then return end
             if newConfig.Discord then
                 currentDiscordIcon = newConfig.Discord
@@ -10502,7 +10878,7 @@ function Window.new(containerManager, configEngine, props)
         end)
     end
     
-    local g = (rawget(getfenv(), "_G"))
+    local g = (rawget(getfenv(), "_G") :: any)
     if g then
         g._SODIUM_ACTIVE_WINDOW = self
     end
@@ -10510,7 +10886,7 @@ function Window.new(containerManager, configEngine, props)
     return self
 end
 
-function Window:_initDraggableWidget(widget, onClick)
+function Window:_initDraggableWidget(widget: GuiObject, onClick: () -> ())
     local isDragging = false
     local startMousePos = Vector2.zero
     local startWidgetPos = Vector2.zero
@@ -10612,7 +10988,7 @@ function Window:_initDraggableWidget(widget, onClick)
     end)
 end
 
-function Window:_initDragging(dragHandle)
+function Window:_initDragging(dragHandle: GuiObject)
     local isDragging = false
     local startMousePos = Vector2.zero
     local startScaleX = 0.5
@@ -10752,42 +11128,44 @@ function Window:ToggleVisibility()
 end
 
 -- Advanced Config Management API shortcuts
-function Window:SaveConfig(name)
+function Window:SaveConfig(name: string): (boolean, string?)
     return self.ConfigEngine:SaveConfig(name)
 end
 
-function Window:LoadConfig(name, silent)
+function Window:LoadConfig(name: string, silent: boolean?): (boolean, string?)
     return self.ConfigEngine:LoadConfig(name, silent)
 end
 
-function Window:DeleteConfig(name)
+function Window:DeleteConfig(name: string): boolean
     return self.ConfigEngine:DeleteConfig(name)
 end
 
-function Window:GetConfigs()
+function Window:GetConfigs(): { string }
     return self.ConfigEngine:GetConfigs()
 end
 
-function Window:ExportConfig(name)
+function Window:ExportConfig(name: string): (string?, string?)
     return self.ConfigEngine:ExportConfig(name)
 end
 
-function Window:ImportConfig(name, jsonString)
+function Window:ImportConfig(name: string, jsonString: string): (boolean, string?)
     return self.ConfigEngine:ImportConfig(name, jsonString)
 end
 
-function Window:SetAutoSave(enabled, name, delay)
+function Window:SetAutoSave(enabled: boolean, name: string?, delay: number?)
     self.ConfigEngine:SetAutoSave(enabled, name, delay)
 end
 
-function Window._buildConfigUI(window, container, props)
+
+function Window._buildConfigUI(window: any, container: any, props: any?)
     props = props or {}
     local engine = window.ConfigEngine
     if not engine then return end
     
     local isTwoCol = container.Columns == 2
-    local leftSec
-    local rightSec
+    local leftSec: any
+    local rightSec: any
+    
     if type(container.Section) == "function" then
         if isTwoCol then
             leftSec = container:Section({ Title = props.FilesTitle or "Configuration Profiles", Column = "Left" })
@@ -10801,7 +11179,7 @@ function Window._buildConfigUI(window, container, props)
         rightSec = container
     end
     
-    local function getCleanList()
+    local function getCleanList(): { string }
         local files = engine:AllConfigs()
         if not files or #files == 0 then
             return { "Default" }
@@ -10810,10 +11188,10 @@ function Window._buildConfigUI(window, container, props)
     end
     
     local currentConfig = engine.ActiveConfig or (getCleanList()[1] or "Default")
-    local configDropdown = nil
-    local configInput = nil
+    local configDropdown: any = nil
+    local configInput: any = nil
     
-    local function refreshDropdown(selectName)
+    local function refreshDropdown(selectName: string?)
         local list = getCleanList()
         if configDropdown then
             configDropdown:Refresh(list)
@@ -11089,7 +11467,7 @@ function Window._buildConfigUI(window, container, props)
     })
 end
 
-function Window:AddConfigTab(props)
+function Window:AddConfigTab(props: any?)
     props = props or {}
     local tabTitle = props.Title or "Configuration"
     local tabIcon = props.Icon or "file-cog"
@@ -11105,7 +11483,7 @@ function Window:AddConfigTab(props)
     return configTab
 end
 
-function Window:AddConfigSection(targetOrProps, maybeProps)
+function Window:AddConfigSection(targetOrProps: any, maybeProps: any?)
     local target = targetOrProps
     local props = maybeProps
     if type(target) == "table" and not target.Section and not target.Tab then
@@ -11116,7 +11494,7 @@ function Window:AddConfigSection(targetOrProps, maybeProps)
     return Window._buildConfigUI(self, target, props)
 end
 
-function Window:ResetToDefaults(silent)
+function Window:ResetToDefaults(silent: boolean?)
     self.ConfigEngine:ResetToDefaults(silent)
 end
 
@@ -11130,7 +11508,7 @@ function Window:_deactivateAllTabs()
     end
 end
 
-function Window:SelectTab(targetTab)
+function Window:SelectTab(targetTab: any)
     if not targetTab then return end
     if self.CurrentTab == targetTab and targetTab.Active then
         return
@@ -11172,7 +11550,7 @@ function Window:SelectTab(targetTab)
     end
 end
 
-function Window:TrackHover(targetTab)
+function Window:TrackHover(targetTab: any)
     if not targetTab or targetTab.Active or not self.HoverTracker then
         if self.HoverTracker then
             self:HideHoverTracker()
@@ -11234,7 +11612,7 @@ function Window:TrackHover(targetTab)
     end
 end
 
-function Window:HideHoverTracker(smooth)
+function Window:HideHoverTracker(smooth: boolean?)
     if not self.HoverTracker then return end
     if self._hoverTrackerTween then
         self._hoverTrackerTween:Cancel()
@@ -11249,7 +11627,7 @@ function Window:HideHoverTracker(smooth)
     end)
 end
 
-function Window:UpdateIndicator(immediate)
+function Window:UpdateIndicator(immediate: boolean?)
     local targetTab = self.CurrentTab
     if not targetTab or not targetTab.SidebarButton or not self.TabIndicator then
         if self.TabIndicator then
@@ -11319,7 +11697,7 @@ function Window:UpdateIndicator(immediate)
         Tweener.Tween(self.TabIndicator, Tweener.Info.Fast, { BackgroundTransparency = 0 })
     else
         self._hasInitializedIndicator = true
-        local tweenGoals = {
+        local tweenGoals: { [string]: any } = {
             Position = targetPos,
             Size = targetSize,
         }
@@ -11346,8 +11724,8 @@ function Window:UpdateIndicator(immediate)
     end
 end
 
-function Window:Tab(rawProps, sectionTarget)
-    local props = if type(rawProps) == "string" then { Title = rawProps } else (rawProps or {})
+function Window:Tab(rawProps: any, sectionTarget: any?)
+    local props: any = if type(rawProps) == "string" then { Title = rawProps } else (rawProps or {})
     props.Title = props.Title or props.Name or "Tab"
 
     local targetSection = sectionTarget or props.Section
@@ -11369,12 +11747,12 @@ function Window:Tab(rawProps, sectionTarget)
     return tabItem
 end
 
-function Window:Section(rawProps)
+function Window:Section(rawProps: any)
     if not rawProps then
         self._currentSection = nil
         return nil
     end
-    local props = if type(rawProps) == "string" then { Title = rawProps } else rawProps
+    local props: any = if type(rawProps) == "string" then { Title = rawProps } else rawProps
     props.Title = props.Title or props.Name or "Section"
 
     local section = TabSection.new(self, self.SidebarTabList, props)
@@ -11383,24 +11761,24 @@ function Window:Section(rawProps)
     return section
 end
 
-function Window:Popup(props)
+function Window:Popup(props: any)
     Popup.Show(self.RootGui, props)
 end
 
-function Window:Notify(props)
+function Window:Notify(props: any)
     Notification.Notify(self.RootGui, props)
 end
 
-function Window:SetToggleKey(keyCode)
+function Window:SetToggleKey(keyCode: Enum.KeyCode | string)
     if typeof(keyCode) == "EnumItem" then
         self.ToggleKey = keyCode
     elseif type(keyCode) == "string" then
-        local found = Enum.KeyCode [keyCode]
+        local found = (Enum.KeyCode :: any)[keyCode]
         self.ToggleKey = found or keyCode
     end
 end
 
-function Window:Dialog(props)
+function Window:Dialog(props: any)
     return Dialog.Show(self.MainFrame, props)
 end
 
@@ -11461,7 +11839,7 @@ function Window:Destroy()
     if self.RootGui then
         self.RootGui:Destroy()
     end
-    local g = (rawget(getfenv(), "_G"))
+    local g = (rawget(getfenv(), "_G") :: any)
     if g and g._SODIUM_ACTIVE_WINDOW == self then
         g._SODIUM_ACTIVE_WINDOW = nil
     end
@@ -11474,10 +11852,13 @@ Window.CreateSection = Window.Section
 Window.AddSection = Window.Section
 
 return Window
-
 end
 
 _MODULES['Init'] = function()
+--[=[
+    Sodium UI - Init.luau
+    Root entry point for creating Windows, Notifications, Popups, and Custom Themes.
+]=]
 
 local Theme = _require("Core/Theme")
 local Icons = _require("Core/Icons")
@@ -11500,8 +11881,8 @@ local SodiumUI = {
 
 local activeContainers = {}
 
-function SodiumUI:CreateWindow(props)
-    local g = (rawget(getfenv(), "_G"))
+function SodiumUI:CreateWindow(props: any)
+    local g = (rawget(getfenv(), "_G") :: any)
     if g and g._SODIUM_ACTIVE_WINDOW then
         pcall(function()
             g._SODIUM_ACTIVE_WINDOW:Destroy()
@@ -11519,15 +11900,15 @@ function SodiumUI:CreateWindow(props)
     return windowInstance
 end
 
-function SodiumUI:AddTheme(name, tokens)
+function SodiumUI:AddTheme(name: string, tokens: any)
     Theme.AddTheme(name, tokens)
 end
 
-function SodiumUI:SetTheme(name)
+function SodiumUI:SetTheme(name: string)
     Theme.SetTheme(name)
 end
 
-function SodiumUI:Notify(props)
+function SodiumUI:Notify(props: any)
     local targetRoot = activeContainers[#activeContainers] and activeContainers[#activeContainers].ScreenGui
     if not targetRoot then
         local tempContainer = Container.new("NotificationRoot")
@@ -11537,7 +11918,7 @@ function SodiumUI:Notify(props)
     Notification.Notify(targetRoot, props)
 end
 
-function SodiumUI:Popup(props)
+function SodiumUI:Popup(props: any)
     local targetRoot = activeContainers[#activeContainers] and activeContainers[#activeContainers].ScreenGui
     if not targetRoot then
         local tempContainer = Container.new("PopupRoot")
@@ -11547,8 +11928,8 @@ function SodiumUI:Popup(props)
     Popup.Show(targetRoot, props)
 end
 
-function SodiumUI:Dialog(props)
-    local g = (rawget(getfenv(), "_G"))
+function SodiumUI:Dialog(props: any)
+    local g = (rawget(getfenv(), "_G") :: any)
     local activeWindow = g and g._SODIUM_ACTIVE_WINDOW
     if activeWindow and activeWindow.MainFrame and activeWindow.MainFrame.Parent then
         return Dialog.Show(activeWindow.MainFrame, props)
@@ -11562,18 +11943,17 @@ function SodiumUI:Dialog(props)
     return Dialog.Show(targetRoot, props)
 end
 
-function SodiumUI:CreateLoading(props)
+function SodiumUI:CreateLoading(props: any)
     return Loading.new(props)
 end
 SodiumUI.Loading = SodiumUI.CreateLoading
 
-function SodiumUI:CreateKeyCheck(props)
+function SodiumUI:CreateKeyCheck(props: any)
     return KeyCheck.new(props)
 end
 SodiumUI.KeyCheck = SodiumUI.CreateKeyCheck
 
 return SodiumUI
-
 end
 
 return _require('Init')
