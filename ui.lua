@@ -3731,12 +3731,20 @@ function ConfigEngine:Get(flag: string): any
     return nil
 end
 
-function ConfigEngine:Set(flag: string, val: any, skipCallback: boolean?)
-    self.Flags[flag] = val
+function ConfigEngine:NotifyChange(flag: string, val: any?)
+    if not flag or flag == "" then return end
     
-    local handler = self._handlers[flag]
-    if handler then
-        pcall(handler.Set, val, skipCallback)
+    if val ~= nil then
+        self.Flags[flag] = val
+    else
+        local handler = self._handlers[flag]
+        if handler then
+            local s, v = pcall(handler.Get)
+            if s and v ~= nil then
+                self.Flags[flag] = v
+                val = v
+            end
+        end
     end
     
     -- Dispatch flag listeners
@@ -3751,6 +3759,17 @@ function ConfigEngine:Set(flag: string, val: any, skipCallback: boolean?)
     if self.AutoSaveEnabled and not self._isBatchLoading then
         self:_triggerAutoSave()
     end
+end
+
+function ConfigEngine:Set(flag: string, val: any, skipCallback: boolean?)
+    self.Flags[flag] = val
+    
+    local handler = self._handlers[flag]
+    if handler then
+        pcall(handler.Set, val, skipCallback)
+    end
+    
+    self:NotifyChange(flag, val)
 end
 
 function ConfigEngine:OnChanged(flag: string, callback: (newVal: any) -> ()): () -> ()
@@ -3786,10 +3805,7 @@ end
 
 function ConfigEngine:SetAutoSave(enabled: boolean, configName: string?, delaySeconds: number?)
     self.AutoSaveEnabled = enabled
-    if not enabled and self._autoSaveThread then
-        task.cancel(self._autoSaveThread)
-        self._autoSaveThread = nil
-    end
+    self._autoSaveGen = (self._autoSaveGen or 0) + 1
     if configName and configName ~= "" then
         self.ActiveConfig = configName
     end
@@ -3800,14 +3816,15 @@ function ConfigEngine:SetAutoSave(enabled: boolean, configName: string?, delaySe
 end
 
 function ConfigEngine:_triggerAutoSave()
-    if self._autoSaveThread then
-        task.cancel(self._autoSaveThread)
-        self._autoSaveThread = nil
-    end
-    self._autoSaveThread = task.delay(self.AutoSaveDelay, function()
-        self._autoSaveThread = nil
-        if self.AutoSaveEnabled and not self._isBatchLoading then
-            self:SaveConfig(self.ActiveConfig or "Default")
+    self._autoSaveGen = (self._autoSaveGen or 0) + 1
+    local currentGen = self._autoSaveGen
+    local delayTime = self.AutoSaveDelay or 0.8
+    task.delay(delayTime, function()
+        if self._autoSaveGen == currentGen then
+            if self.AutoSaveEnabled and not self._isBatchLoading then
+                local target = self.ActiveConfig or "Default"
+                self:SaveConfig(target)
+            end
         end
     end)
 end
@@ -7306,6 +7323,7 @@ function Toggle.new(parent: Instance, configEngine: any, props: any)
     checkSquare.Parent = triggerBtn
     
     self.Container = container
+    self.ConfigEngine = configEngine
     self.TitleLabel = titleLabel
     self.DescLabel = descLabel
     self.CheckSquare = checkSquare
@@ -7383,6 +7401,10 @@ function Toggle:Set(state: boolean, skipCallback: boolean?, animate: boolean?)
         if not ok then
             warn("[SodiumUI.Toggle] Callback error:", err)
         end
+    end
+    
+    if not skipCallback and self.Flag and self.ConfigEngine then
+        self.ConfigEngine:NotifyChange(self.Flag, self.Value)
     end
 end
 
@@ -7645,6 +7667,7 @@ function Slider.new(parent: Instance, configEngine: any, props: any)
     controlArea.Parent = container
     
     self.Container = container
+    self.ConfigEngine = configEngine
     self.TitleLabel = titleLabel
     self.DescLabel = descLabel
     self.Track = track
@@ -7868,6 +7891,10 @@ function Slider:Set(newVal: number, skipCallback: boolean?, animate: boolean?)
         if not ok then
             warn("[SodiumUI.Slider] Callback error:", err)
         end
+    end
+    
+    if not skipCallback and self.Flag and self.ConfigEngine then
+        self.ConfigEngine:NotifyChange(self.Flag, self.Value)
     end
     
     self._isUpdating = false
@@ -8128,6 +8155,7 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
     popover.Parent = trigger
     
     self.Container = container
+    self.ConfigEngine = configEngine
     self.TitleLabel = titleLabel
     self.DescLabel = descLabel
     self.Trigger = trigger
@@ -8333,6 +8361,9 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
                     if self.Callback then
                         self.Callback(table.clone(self.Selected))
                     end
+                    if self.Flag and self.ConfigEngine then
+                        self.ConfigEngine:NotifyChange(self.Flag, self.Selected)
+                    end
                 else
                     if isItemMatch(self.Selected, itemTitle, rawItemVal) then
                         if self.AllowNone then
@@ -8347,6 +8378,9 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
                     self:Close()
                     if self.Callback then
                         self.Callback(self.Selected)
+                    end
+                    if self.Flag and self.ConfigEngine then
+                        self.ConfigEngine:NotifyChange(self.Flag, self.Selected)
                     end
                 end
             end)
@@ -8537,6 +8571,9 @@ function Dropdown:Set(val: any, skipCallback: boolean?)
             warn("[SodiumUI.Dropdown] Callback error:", err)
         end
     end
+    if not skipCallback and self.Flag and self.ConfigEngine then
+        self.ConfigEngine:NotifyChange(self.Flag, self.Selected)
+    end
 end
 
 function Dropdown:Clear(skipCallback: boolean?)
@@ -8552,6 +8589,9 @@ function Dropdown:Clear(skipCallback: boolean?)
     end
     if not skipCallback and self.Callback then
         self.Callback(self.Selected)
+    end
+    if not skipCallback and self.Flag and self.ConfigEngine then
+        self.ConfigEngine:NotifyChange(self.Flag, self.Selected)
     end
 end
 Dropdown.ClearDropdown = Dropdown.Clear
@@ -8768,6 +8808,7 @@ function Input.new(parent: Instance, configEngine: any, props: any)
     boxFrame.Parent = container
     
     self.Container = container
+    self.ConfigEngine = configEngine
     self.TitleLabel = titleLabel
     self.DescLabel = descLabel
     self.TextBox = textBox
@@ -8812,6 +8853,9 @@ function Input.new(parent: Instance, configEngine: any, props: any)
         if self.Callback then
             self.Callback(self.Value)
         end
+        if self.Flag and self.ConfigEngine then
+            self.ConfigEngine:NotifyChange(self.Flag, self.Value)
+        end
     end))
     
     table.insert(self._connections, textBox:GetPropertyChangedSignal("Text"):Connect(function()
@@ -8831,6 +8875,9 @@ function Input.new(parent: Instance, configEngine: any, props: any)
         clearBtn.Visible = false
         if self.Callback then
             self.Callback("")
+        end
+        if self.Flag and self.ConfigEngine then
+            self.ConfigEngine:NotifyChange(self.Flag, "")
         end
     end))
     
@@ -8858,6 +8905,9 @@ function Input:Set(text: string, skipCallback: boolean?)
         if not ok then
             warn("[SodiumUI.Input] Callback error:", err)
         end
+    end
+    if not skipCallback and self.Flag and self.ConfigEngine then
+        self.ConfigEngine:NotifyChange(self.Flag, self.Value)
     end
 end
 
@@ -9056,6 +9106,7 @@ function Keybind.new(parent: Instance, configEngine: any, props: any)
     badge.Parent = container
     
     self.Container = container
+    self.ConfigEngine = configEngine
     self.TitleLabel = titleLabel
     self.DescLabel = descLabel
     self.Badge = badge
@@ -9327,6 +9378,9 @@ function Keybind:Set(key: any, skipCallback: boolean?)
         if not ok then
             warn("[SodiumUI.Keybind] Callback error:", err)
         end
+    end
+    if not skipCallback and self.Flag and self.ConfigEngine then
+        self.ConfigEngine:NotifyChange(self.Flag, self.Value)
     end
 end
 
@@ -9627,7 +9681,7 @@ export type SectionProps = {
     Column: string?,
 }
 
-function Section.new(parent: Instance, configEngine: any, rawProps: any)
+function Section.new(parent: Instance, configEngine: any, rawProps: any, window: any?)
     local props: any = if type(rawProps) == "string" then { Title = rawProps } else (rawProps or {})
     local sectionTitle = props.Title or props.Name or "Section"
     props.Title = sectionTitle
@@ -9635,6 +9689,7 @@ function Section.new(parent: Instance, configEngine: any, rawProps: any)
     local self = setmetatable({}, Section)
     self.Title = Locale.Resolve(sectionTitle)
     self.ConfigEngine = configEngine
+    self.Window = window or (configEngine and configEngine.Window)
     self.Opened = if props.Opened ~= nil then props.Opened else true
     
     local card = Instance.new("Frame")
@@ -9812,6 +9867,107 @@ function Section:SetTitle(newTitle: string)
     end
 end
 
+
+function Section:GetWindow()
+    return self.Window or (self.ConfigEngine and self.ConfigEngine.Window)
+end
+
+function Section:ConfigDropdown(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigDropdown then
+        return win:AddConfigDropdown(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigInput(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigInput then
+        return win:AddConfigInput(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigSaveButton(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigSaveButton then
+        return win:AddConfigSaveButton(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigLoadButton(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigLoadButton then
+        return win:AddConfigLoadButton(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigDeleteButton(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigDeleteButton then
+        return win:AddConfigDeleteButton(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigAutoLoadToggle(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigAutoLoadToggle then
+        return win:AddConfigAutoLoadToggle(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigAutoSaveToggle(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigAutoSaveToggle then
+        return win:AddConfigAutoSaveToggle(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigRefreshButton(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigRefreshButton then
+        return win:AddConfigRefreshButton(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigResetButton(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigResetButton then
+        return win:AddConfigResetButton(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigExportButton(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigExportButton then
+        return win:AddConfigExportButton(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigImportButton(props: any?)
+    local win = self:GetWindow()
+    if win and win.AddConfigImportButton then
+        return win:AddConfigImportButton(self, props)
+    end
+    return nil
+end
+
+function Section:ConfigElements(elementsList: { string }?, options: any?)
+    local win = self:GetWindow()
+    if win and win.CreateConfigElements then
+        return win:CreateConfigElements(self, elementsList, options)
+    end
+    return {}
+end
+
 function Section:Destroy()
     self.Card:Destroy()
 end
@@ -9833,6 +9989,54 @@ Section.CreateParagraph = Section.Paragraph
 Section.AddParagraph = Section.Paragraph
 Section.CreateDivider = Section.Divider
 Section.AddDivider = Section.Divider
+
+
+Section.AddConfigDropdown = Section.ConfigDropdown
+Section.CreateConfigDropdown = Section.ConfigDropdown
+Section.DropdownConfig = Section.ConfigDropdown
+
+Section.AddConfigInput = Section.ConfigInput
+Section.CreateConfigInput = Section.ConfigInput
+Section.InputNameConfig = Section.ConfigInput
+Section.ConfigNameInput = Section.ConfigInput
+
+Section.AddConfigSaveButton = Section.ConfigSaveButton
+Section.CreateConfigSaveButton = Section.ConfigSaveButton
+Section.ButtonSave = Section.ConfigSaveButton
+Section.ConfigSave = Section.ConfigSaveButton
+
+Section.AddConfigLoadButton = Section.ConfigLoadButton
+Section.CreateConfigLoadButton = Section.ConfigLoadButton
+Section.ButtonLoad = Section.ConfigLoadButton
+Section.ConfigLoad = Section.ConfigLoadButton
+
+Section.AddConfigDeleteButton = Section.ConfigDeleteButton
+Section.CreateConfigDeleteButton = Section.ConfigDeleteButton
+Section.ButtonDelete = Section.ConfigDeleteButton
+Section.ConfigDelete = Section.ConfigDeleteButton
+
+Section.AddConfigAutoLoadToggle = Section.ConfigAutoLoadToggle
+Section.CreateConfigAutoLoadToggle = Section.ConfigAutoLoadToggle
+Section.ToggleAutoLoad = Section.ConfigAutoLoadToggle
+
+Section.AddConfigAutoSaveToggle = Section.ConfigAutoSaveToggle
+Section.CreateConfigAutoSaveToggle = Section.ConfigAutoSaveToggle
+Section.ToggleAutoSave = Section.ConfigAutoSaveToggle
+
+Section.AddConfigRefreshButton = Section.ConfigRefreshButton
+Section.CreateConfigRefreshButton = Section.ConfigRefreshButton
+
+Section.AddConfigResetButton = Section.ConfigResetButton
+Section.CreateConfigResetButton = Section.ConfigResetButton
+
+Section.AddConfigExportButton = Section.ConfigExportButton
+Section.CreateConfigExportButton = Section.ConfigExportButton
+
+Section.AddConfigImportButton = Section.ConfigImportButton
+Section.CreateConfigImportButton = Section.ConfigImportButton
+
+Section.AddConfigElements = Section.ConfigElements
+Section.CreateConfigElements = Section.ConfigElements
 
 return Section
 end
@@ -10245,7 +10449,7 @@ function Tab:Section(rawProps: any)
         end
     end
     
-    return Section.new(targetParent, self.ConfigEngine, props)
+    return Section.new(targetParent, self.ConfigEngine, props, self.Window)
 end
 
 function Tab:_getOrCreateDefaultSection()
@@ -10288,6 +10492,55 @@ function Tab:Divider(props: any)
     return self:_getOrCreateDefaultSection():Divider(props)
 end
 
+
+function Tab:ConfigDropdown(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigDropdown(props)
+end
+
+function Tab:ConfigInput(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigInput(props)
+end
+
+function Tab:ConfigSaveButton(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigSaveButton(props)
+end
+
+function Tab:ConfigLoadButton(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigLoadButton(props)
+end
+
+function Tab:ConfigDeleteButton(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigDeleteButton(props)
+end
+
+function Tab:ConfigAutoLoadToggle(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigAutoLoadToggle(props)
+end
+
+function Tab:ConfigAutoSaveToggle(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigAutoSaveToggle(props)
+end
+
+function Tab:ConfigRefreshButton(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigRefreshButton(props)
+end
+
+function Tab:ConfigResetButton(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigResetButton(props)
+end
+
+function Tab:ConfigExportButton(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigExportButton(props)
+end
+
+function Tab:ConfigImportButton(props: any?)
+    return self:_getOrCreateDefaultSection():ConfigImportButton(props)
+end
+
+function Tab:ConfigElements(elementsList: { string }?, options: any?)
+    return self:_getOrCreateDefaultSection():ConfigElements(elementsList, options)
+end
+
 -- Aliases for flexible API compatibility
 Tab.CreateSection = Tab.Section
 Tab.AddSection = Tab.Section
@@ -10310,6 +10563,54 @@ Tab.CreateParagraph = Tab.Paragraph
 Tab.AddParagraph = Tab.Paragraph
 Tab.CreateDivider = Tab.Divider
 Tab.AddDivider = Tab.Divider
+
+
+Tab.AddConfigDropdown = Tab.ConfigDropdown
+Tab.CreateConfigDropdown = Tab.ConfigDropdown
+Tab.DropdownConfig = Tab.ConfigDropdown
+
+Tab.AddConfigInput = Tab.ConfigInput
+Tab.CreateConfigInput = Tab.ConfigInput
+Tab.InputNameConfig = Tab.ConfigInput
+Tab.ConfigNameInput = Tab.ConfigInput
+
+Tab.AddConfigSaveButton = Tab.ConfigSaveButton
+Tab.CreateConfigSaveButton = Tab.ConfigSaveButton
+Tab.ButtonSave = Tab.ConfigSaveButton
+Tab.ConfigSave = Tab.ConfigSaveButton
+
+Tab.AddConfigLoadButton = Tab.ConfigLoadButton
+Tab.CreateConfigLoadButton = Tab.ConfigLoadButton
+Tab.ButtonLoad = Tab.ConfigLoadButton
+Tab.ConfigLoad = Tab.ConfigLoadButton
+
+Tab.AddConfigDeleteButton = Tab.ConfigDeleteButton
+Tab.CreateConfigDeleteButton = Tab.ConfigDeleteButton
+Tab.ButtonDelete = Tab.ConfigDeleteButton
+Tab.ConfigDelete = Tab.ConfigDeleteButton
+
+Tab.AddConfigAutoLoadToggle = Tab.ConfigAutoLoadToggle
+Tab.CreateConfigAutoLoadToggle = Tab.ConfigAutoLoadToggle
+Tab.ToggleAutoLoad = Tab.ConfigAutoLoadToggle
+
+Tab.AddConfigAutoSaveToggle = Tab.ConfigAutoSaveToggle
+Tab.CreateConfigAutoSaveToggle = Tab.ConfigAutoSaveToggle
+Tab.ToggleAutoSave = Tab.ConfigAutoSaveToggle
+
+Tab.AddConfigRefreshButton = Tab.ConfigRefreshButton
+Tab.CreateConfigRefreshButton = Tab.ConfigRefreshButton
+
+Tab.AddConfigResetButton = Tab.ConfigResetButton
+Tab.CreateConfigResetButton = Tab.ConfigResetButton
+
+Tab.AddConfigExportButton = Tab.ConfigExportButton
+Tab.CreateConfigExportButton = Tab.ConfigExportButton
+
+Tab.AddConfigImportButton = Tab.ConfigImportButton
+Tab.CreateConfigImportButton = Tab.ConfigImportButton
+
+Tab.AddConfigElements = Tab.ConfigElements
+Tab.CreateConfigElements = Tab.ConfigElements
 
 return Tab
 end
@@ -12202,11 +12503,518 @@ function Window:SetAutoSave(enabled: boolean, name: string?, delay: number?)
     self.ConfigEngine:SetAutoSave(enabled, name, delay)
 end
 
+function Window:GetConfigUIState()
+    if not self._configUIState then
+        local engine = self.ConfigEngine
+        local cleanList = if engine then engine:AllConfigs() else {}
+        local initial = (engine and engine.ActiveConfig) or (cleanList and cleanList[1]) or "Default"
+        self._configUIState = {
+            currentConfig = initial,
+            dropdowns = {},
+            inputs = {},
+        }
+    end
+    return self._configUIState
+end
+
+function Window:SetConfigProfileName(name: string, source: any?)
+    if not name or name == "" then return end
+    local state = self:GetConfigUIState()
+    state.currentConfig = name
+    if self.ConfigEngine then
+        self.ConfigEngine.ActiveConfig = name
+    end
+    
+    for input, _ in pairs(state.inputs) do
+        if input ~= source then
+            pcall(function() input:Set(name, true) end)
+        end
+    end
+    
+    for dropdown, _ in pairs(state.dropdowns) do
+        if dropdown ~= source then
+            local list = if self.ConfigEngine then self.ConfigEngine:AllConfigs() else {}
+            if table.find(list, name) then
+                pcall(function() dropdown:Set(name, true) end)
+            end
+        end
+    end
+end
+
+function Window:RefreshConfigDropdowns(selectName: string?)
+    local state = self:GetConfigUIState()
+    local engine = self.ConfigEngine
+    local list = if engine then engine:AllConfigs() else {}
+    if not list or #list == 0 then
+        list = { "Default" }
+    end
+    local target = selectName or state.currentConfig or "Default"
+    
+    for dropdown, _ in pairs(state.dropdowns) do
+        pcall(function()
+            dropdown:Refresh(list)
+            if table.find(list, target) then
+                dropdown:Set(target, true)
+            end
+        end)
+    end
+end
+
+function Window:AddConfigDropdown(container: any, props: any?)
+    props = props or {}
+    local state = self:GetConfigUIState()
+    local engine = self.ConfigEngine
+    local list = if engine then engine:AllConfigs() else {}
+    if not list or #list == 0 then list = { "Default" } end
+    
+    local dropdown = container:Dropdown({
+        Title = props.Title or { en = "Select Profile", th = "เลือกโปรไฟล์" },
+        Desc = props.Desc or { en = "Choose an existing configuration profile", th = "เลือกโปรไฟล์คอนฟิกที่ต้องการใช้งาน" },
+        Values = list,
+        Value = state.currentConfig,
+        AllowNone = false,
+        Callback = function(selected)
+            if selected and selected ~= "" then
+                self:SetConfigProfileName(selected, "dropdown")
+                if props.Callback then
+                    pcall(props.Callback, selected)
+                end
+            end
+        end,
+    })
+    state.dropdowns[dropdown] = true
+    return dropdown
+end
+
+function Window:AddConfigInput(container: any, props: any?)
+    props = props or {}
+    local state = self:GetConfigUIState()
+    local input = container:Input({
+        Title = props.Title or { en = "Profile Name", th = "ชื่อโปรไฟล์" },
+        Desc = props.Desc or { en = "Enter or edit profile name", th = "พิมพ์หรือแก้ไขชื่อโปรไฟล์" },
+        Placeholder = props.Placeholder or { en = "Profile name...", th = "ชื่อโปรไฟล์..." },
+        Value = state.currentConfig,
+        Icon = props.Icon or "file-text",
+        Callback = function(text)
+            if text and text:match("%S") then
+                local clean = text:match("^%s*(.-)%s*$")
+                self:SetConfigProfileName(clean, "input")
+                if props.Callback then
+                    pcall(props.Callback, clean)
+                end
+            end
+        end,
+    })
+    state.inputs[input] = true
+    return input
+end
+
+function Window:AddConfigSaveButton(container: any, props: any?)
+    props = props or {}
+    local state = self:GetConfigUIState()
+    local engine = self.ConfigEngine
+    return container:Button({
+        Title = props.Title or { en = "Save Profile", th = "บันทึกโปรไฟล์" },
+        Desc = props.Desc or { en = "Save all current UI element values to this profile", th = "บันทึกค่าการตั้งค่าทั้งหมดลงในโปรไฟล์นี้" },
+        Icon = props.Icon or "save",
+        Callback = function()
+            local targetName = state.currentConfig
+            if not targetName or targetName == "" then targetName = "Default" end
+            local ok, err = engine:SaveConfig(targetName)
+            if ok then
+                self:RefreshConfigDropdowns(targetName)
+                self:Notify({
+                    Title = { en = "Config Saved", th = "บันทึกสำเร็จ" },
+                    Content = {
+                        en = "Profile '" .. targetName .. "' saved successfully.",
+                        th = "บันทึกโปรไฟล์ '" .. targetName .. "' เรียบร้อยแล้ว",
+                    },
+                    Icon = "save",
+                    Duration = 2.5,
+                })
+            else
+                self:Notify({
+                    Title = { en = "Save Failed", th = "บันทึกล้มเหลว" },
+                    Content = tostring(err),
+                    Icon = "triangle-alert",
+                    Duration = 3,
+                })
+            end
+            if props.Callback then
+                pcall(props.Callback, ok, targetName)
+            end
+        end,
+    })
+end
+
+function Window:AddConfigLoadButton(container: any, props: any?)
+    props = props or {}
+    local state = self:GetConfigUIState()
+    local engine = self.ConfigEngine
+    return container:Button({
+        Title = props.Title or { en = "Load Profile", th = "โหลดโปรไฟล์" },
+        Desc = props.Desc or { en = "Apply saved values from selected profile to the UI", th = "นำค่าที่บันทึกไว้ในโปรไฟล์มาใช้กับ UI" },
+        Icon = props.Icon or "folder-open",
+        Callback = function()
+            local targetName = state.currentConfig
+            if not targetName or targetName == "" then targetName = "Default" end
+            local ok, err = engine:LoadConfig(targetName, false)
+            if ok then
+                self:RefreshConfigDropdowns(targetName)
+                self:Notify({
+                    Title = { en = "Config Loaded", th = "โหลดสำเร็จ" },
+                    Content = {
+                        en = "Loaded profile '" .. targetName .. "' successfully.",
+                        th = "โหลดโปรไฟล์ '" .. targetName .. "' เรียบร้อยแล้ว",
+                    },
+                    Icon = "folder-open",
+                    Duration = 2.5,
+                })
+            else
+                self:Notify({
+                    Title = { en = "Load Failed", th = "โหลดล้มเหลว" },
+                    Content = tostring(err),
+                    Icon = "triangle-alert",
+                    Duration = 3,
+                })
+            end
+            if props.Callback then
+                pcall(props.Callback, ok, targetName)
+            end
+        end,
+    })
+end
+
+function Window:AddConfigDeleteButton(container: any, props: any?)
+    props = props or {}
+    local state = self:GetConfigUIState()
+    local engine = self.ConfigEngine
+    return container:Button({
+        Title = props.Title or { en = "Delete Profile", th = "ลบโปรไฟล์" },
+        Desc = props.Desc or { en = "Permanently remove this configuration file from disk", th = "ลบไฟล์คอนฟิกนี้ออกจากเครื่องอย่างถาวร" },
+        Icon = props.Icon or "trash",
+        Callback = function()
+            local targetName = state.currentConfig
+            if not targetName or targetName == "" or targetName == "Default" then
+                self:Notify({
+                    Title = { en = "Action Denied", th = "ไม่อนุญาต" },
+                    Content = { en = "Cannot delete the default profile.", th = "ไม่สามารถลบโปรไฟล์เริ่มต้น (Default) ได้" },
+                    Icon = "shield-alert",
+                    Duration = 3,
+                })
+                return
+            end
+            
+            self:Dialog({
+                Title = { en = "Delete Configuration?", th = "ยืนยันการลบคอนฟิก?" },
+                Content = {
+                    en = "Are you sure you want to permanently delete profile '" .. targetName .. "'? This action cannot be undone.",
+                    th = "คุณแน่ใจหรือไม่ว่าต้องการลบโปรไฟล์ '" .. targetName .. "'? ข้อมูลจะถูกลบอย่างถาวรและไม่สามารถกู้คืนได้",
+                },
+                Icon = "trash",
+                Buttons = {
+                    { Title = { en = "Cancel", th = "ยกเลิก" }, Style = "Secondary" },
+                    {
+                        Title = { en = "Delete", th = "ลบไฟล์" },
+                        Style = "Danger",
+                        Callback = function()
+                            local ok = engine:DeleteConfig(targetName)
+                            if ok then
+                                self:SetConfigProfileName("Default")
+                                self:RefreshConfigDropdowns("Default")
+                                self:Notify({
+                                    Title = { en = "Profile Deleted", th = "ลบโปรไฟล์สำเร็จ" },
+                                    Content = {
+                                        en = "Deleted profile '" .. targetName .. "'.",
+                                        th = "ลบโปรไฟล์ '" .. targetName .. "' เรียบร้อยแล้ว",
+                                    },
+                                    Icon = "trash",
+                                    Duration = 3,
+                                })
+                            end
+                            if props.Callback then
+                                pcall(props.Callback, ok, targetName)
+                            end
+                        end,
+                    },
+                },
+            })
+        end,
+    })
+end
+
+function Window:AddConfigAutoLoadToggle(container: any, props: any?)
+    props = props or {}
+    local state = self:GetConfigUIState()
+    local engine = self.ConfigEngine
+    return container:Toggle({
+        Title = props.Title or { en = "Auto-Load Profile", th = "โหลดอัตโนมัติเมื่อเปิดสคริปต์" },
+        Desc = props.Desc or { en = "Automatically load the selected profile upon script boot", th = "โหลดโปรไฟล์ที่เลือกอัตโนมัติเมื่อเปิดใช้งานสคริปต์" },
+        Value = engine:GetAutoLoad(),
+        Callback = function(enabled)
+            engine:SetAutoLoad(enabled)
+            self:Notify({
+                Title = { en = "Auto-Load Config", th = "โหลดอัตโนมัติ" },
+                Content = if enabled then {
+                    en = "Auto-load enabled for '" .. state.currentConfig .. "'.",
+                    th = "เปิดการโหลดอัตโนมัติสำหรับ '" .. state.currentConfig .. "' แล้ว",
+                } else {
+                    en = "Auto-load disabled.",
+                    th = "ปิดการโหลดอัตโนมัติแล้ว",
+                },
+                Icon = "file-cog",
+                Duration = 2,
+            })
+            if props.Callback then
+                pcall(props.Callback, enabled)
+            end
+        end,
+    })
+end
+
+function Window:AddConfigAutoSaveToggle(container: any, props: any?)
+    props = props or {}
+    local state = self:GetConfigUIState()
+    local engine = self.ConfigEngine
+    return container:Toggle({
+        Title = props.Title or { en = "Auto-Save Profile", th = "บันทึกอัตโนมัติแบบเรียลไทม์" },
+        Desc = props.Desc or { en = "Save changes in real-time when controls are modified (0.8s debounce)", th = "บันทึกการตั้งค่าอัตโนมัติทันทีเมื่อมีการปรับเปลี่ยนค่า (หน่วงเวลา 0.8s)" },
+        Value = engine.AutoSaveEnabled,
+        Callback = function(enabled)
+            engine:SetAutoSave(enabled, state.currentConfig, 0.8)
+            self:Notify({
+                Title = { en = "Auto-Save Config", th = "บันทึกอัตโนมัติ" },
+                Content = if enabled then {
+                    en = "Realtime auto-save active.",
+                    th = "เปิดการบันทึกอัตโนมัติแล้ว",
+                } else {
+                    en = "Auto-save disabled.",
+                    th = "ปิดการบันทึกอัตโนมัติแล้ว",
+                },
+                Icon = "refresh-cw",
+                Duration = 2,
+            })
+            if props.Callback then
+                pcall(props.Callback, enabled)
+            end
+        end,
+    })
+end
+
+function Window:AddConfigRefreshButton(container: any, props: any?)
+    props = props or {}
+    return container:Button({
+        Title = props.Title or { en = "Refresh Profiles List", th = "รีเฟรชรายการโปรไฟล์" },
+        Desc = props.Desc or { en = "Rescan folder for newly added or renamed configs", th = "สแกนค้นหาไฟล์คอนฟิกใหม่หรือที่เปลี่ยนชื่อ" },
+        Icon = props.Icon or "rotate-cw",
+        Callback = function()
+            self:RefreshConfigDropdowns()
+            self:Notify({
+                Title = { en = "Profiles Refreshed", th = "รีเฟรชสำเร็จ" },
+                Content = {
+                    en = "Refreshed configuration files list.",
+                    th = "อัปเดตรายการไฟล์คอนฟิกเรียบร้อยแล้ว",
+                },
+                Icon = "rotate-cw",
+                Duration = 2,
+            })
+            if props.Callback then
+                pcall(props.Callback)
+            end
+        end,
+    })
+end
+
+function Window:AddConfigResetButton(container: any, props: any?)
+    props = props or {}
+    local engine = self.ConfigEngine
+    return container:Button({
+        Title = props.Title or { en = "Reset to Factory Defaults", th = "รีเซ็ตค่าเริ่มต้นโรงงาน" },
+        Desc = props.Desc or { en = "Revert all controls back to initial script values", th = "คืนค่าการตั้งค่าทั้งหมดกลับเป็นค่าเริ่มต้นดั้งเดิม" },
+        Icon = props.Icon or "rotate-ccw",
+        Callback = function()
+            self:Dialog({
+                Title = { en = "Reset to Defaults", th = "ยืนยันการรีเซ็ต" },
+                Content = {
+                    en = "Are you sure you want to reset all controls to factory default values? Any unsaved changes will be lost.",
+                    th = "คุณแน่ใจหรือไม่ว่าต้องการรีเซ็ตการตั้งค่าทั้งหมดกลับเป็นค่าเริ่มต้นโรงงาน? การตั้งค่าที่ไม่ได้บันทึกจะหายไป",
+                },
+                Icon = "rotate-ccw",
+                Buttons = {
+                    { Title = { en = "Cancel", th = "ยกเลิก" }, Style = "Secondary" },
+                    {
+                        Title = { en = "Reset All", th = "รีเซ็ตทั้งหมด" },
+                        Style = "Danger",
+                        Callback = function()
+                            engine:ResetToDefaults(false)
+                            self:Notify({
+                                Title = { en = "Reset Complete", th = "รีเซ็ตสำเร็จ" },
+                                Content = {
+                                    en = "All controls reverted to factory default values.",
+                                    th = "คืนค่าการตั้งค่าทั้งหมดกลับเป็นค่าเริ่มต้นโรงงานแล้ว",
+                                },
+                                Icon = "check-circle",
+                                Duration = 2.5,
+                            })
+                            if props.Callback then
+                                pcall(props.Callback)
+                            end
+                        end,
+                    },
+                },
+            })
+        end,
+    })
+end
+
+function Window:AddConfigExportButton(container: any, props: any?)
+    props = props or {}
+    local state = self:GetConfigUIState()
+    local engine = self.ConfigEngine
+    return container:Button({
+        Title = props.Title or { en = "Export to Clipboard", th = "ส่งออกไปยังคลิปบอร์ด" },
+        Desc = props.Desc or { en = "Copy current profile configuration as JSON text", th = "คัดลอกข้อมูลโปรไฟล์ปัจจุบันเป็นข้อความ JSON" },
+        Icon = props.Icon or "copy",
+        Callback = function()
+            local targetName = state.currentConfig
+            local ok, jsonStr = pcall(function() return engine:ExportConfig(targetName) end)
+            if ok and jsonStr and jsonStr ~= "" then
+                local setclip = (typeof(setclipboard) == "function" and setclipboard)
+                    or (typeof(toclipboard) == "function" and toclipboard)
+                if setclip then
+                    pcall(setclip, jsonStr)
+                end
+                self:Notify({
+                    Title = { en = "Export Successful", th = "ส่งออกสำเร็จ" },
+                    Content = {
+                        en = "Config JSON copied to clipboard.",
+                        th = "คัดลอกข้อความ JSON ลงคลิปบอร์ดแล้ว",
+                    },
+                    Icon = "copy-check",
+                    Duration = 2.5,
+                })
+            else
+                self:Notify({
+                    Title = { en = "Export Failed", th = "ส่งออกล้มเหลว" },
+                    Content = { en = "Unable to export profile.", th = "ไม่สามารถส่งออกโปรไฟล์ได้" },
+                    Icon = "triangle-alert",
+                    Duration = 3,
+                })
+            end
+            if props.Callback then
+                pcall(props.Callback, ok, jsonStr)
+            end
+        end,
+    })
+end
+
+function Window:AddConfigImportButton(container: any, props: any?)
+    props = props or {}
+    local state = self:GetConfigUIState()
+    local engine = self.ConfigEngine
+    return container:Button({
+        Title = props.Title or { en = "Import from Clipboard", th = "นำเข้าจากคลิปบอร์ด" },
+        Desc = props.Desc or { en = "Paste and load JSON configuration from clipboard", th = "นำเข้าและโหลดข้อมูล JSON จากคลิปบอร์ด" },
+        Icon = props.Icon or "clipboard-paste",
+        Callback = function()
+            local getclip = (typeof(getclipboard) == "function" and getclipboard)
+            local jsonStr = ""
+            if getclip then
+                local ok, clip = pcall(getclip)
+                if ok and type(clip) == "string" then
+                    jsonStr = clip
+                end
+            end
+            
+            if jsonStr == "" then
+                self:Notify({
+                    Title = { en = "Import Failed", th = "นำเข้าล้มเหลว" },
+                    Content = {
+                        en = "Clipboard is empty or executor does not support getclipboard.",
+                        th = "คลิปบอร์ดว่างเปล่า หรือตัวรันไม่รองรับ getclipboard",
+                    },
+                    Icon = "triangle-alert",
+                    Duration = 3,
+                })
+                return
+            end
+            
+            local targetName = state.currentConfig or "Imported"
+            local ok, err = engine:ImportConfig(targetName, jsonStr)
+            if ok then
+                engine:LoadConfig(targetName, false)
+                self:RefreshConfigDropdowns(targetName)
+                self:Notify({
+                    Title = { en = "Import Successful", th = "นำเข้าสำเร็จ" },
+                    Content = {
+                        en = "Config imported and loaded successfully.",
+                        th = "นำเข้าและโหลดคอนฟิกเรียบร้อยแล้ว",
+                    },
+                    Icon = "check-circle",
+                    Duration = 2.5,
+                })
+            else
+                self:Notify({
+                    Title = { en = "Invalid JSON", th = "รูปแบบ JSON ไม่ถูกต้อง" },
+                    Content = tostring(err),
+                    Icon = "triangle-alert",
+                    Duration = 3,
+                })
+            end
+            if props.Callback then
+                pcall(props.Callback, ok, targetName)
+            end
+        end,
+    })
+end
+
+function Window:CreateConfigElements(container: any, elementsList: { string }?, options: any?): { [string]: any }
+    elementsList = elementsList or { "Dropdown", "Input", "Save", "Load" }
+    options = options or {}
+    local created = {}
+    
+    for _, rawKey in ipairs(elementsList) do
+        local key = string.lower(string.gsub(tostring(rawKey), "[%s_-]", ""))
+        local opt = options[rawKey] or options[key] or {}
+        
+        if key == "dropdown" or key == "select" or key == "profile" or key == "selectprofile" or key == "profiles" then
+            created.Dropdown = self:AddConfigDropdown(container, opt)
+        elseif key == "input" or key == "inputname" or key == "name" or key == "profilename" or key == "inputnameconfig" or key == "configname" then
+            created.Input = self:AddConfigInput(container, opt)
+        elseif key == "save" or key == "savebutton" or key == "buttonsave" or key == "saveconfig" or key == "saveprofile" then
+            created.Save = self:AddConfigSaveButton(container, opt)
+        elseif key == "load" or key == "loadbutton" or key == "buttonload" or key == "loadconfig" or key == "loadprofile" then
+            created.Load = self:AddConfigLoadButton(container, opt)
+        elseif key == "delete" or key == "deletebutton" or key == "buttondelete" or key == "deleteconfig" or key == "deleteprofile" then
+            created.Delete = self:AddConfigDeleteButton(container, opt)
+        elseif key == "autoload" or key == "autoloadtoggle" or key == "toggleautoload" then
+            created.AutoLoad = self:AddConfigAutoLoadToggle(container, opt)
+        elseif key == "autosave" or key == "autosavetoggle" or key == "toggleautosave" then
+            created.AutoSave = self:AddConfigAutoSaveToggle(container, opt)
+        elseif key == "refresh" or key == "refreshbutton" or key == "buttonrefresh" or key == "rescan" then
+            created.Refresh = self:AddConfigRefreshButton(container, opt)
+        elseif key == "reset" or key == "resetbutton" or key == "buttonreset" or key == "defaults" then
+            created.Reset = self:AddConfigResetButton(container, opt)
+        elseif key == "export" or key == "exportbutton" or key == "buttonexport" then
+            created.Export = self:AddConfigExportButton(container, opt)
+        elseif key == "import" or key == "importbutton" or key == "buttonimport" then
+            created.Import = self:AddConfigImportButton(container, opt)
+        end
+    end
+    
+    return created
+end
+
 
 function Window._buildConfigUI(window: any, container: any, props: any?)
     props = props or {}
     local engine = window.ConfigEngine
     if not engine then return end
+    
+    -- If custom elements list is requested, render only those elements!
+    if props.Elements and type(props.Elements) == "table" and #props.Elements > 0 then
+        return window:CreateConfigElements(container, props.Elements, props.Options or props)
+    end
     
     local isTwoCol = container.Columns == 2
     local leftSec: any
@@ -12228,353 +13036,22 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
         rightSec = container
     end
     
-    local function getCleanList(): { string }
-        local files = engine:AllConfigs()
-        if not files or #files == 0 then
-            return { "Default" }
-        end
-        return files
-    end
+    -- Left Section Elements (Profile management)
+    window:AddConfigDropdown(leftSec)
+    window:AddConfigInput(leftSec)
+    window:AddConfigSaveButton(leftSec)
+    window:AddConfigLoadButton(leftSec)
+    window:AddConfigDeleteButton(leftSec)
+    window:AddConfigRefreshButton(leftSec)
     
-    local currentConfig = engine.ActiveConfig or (getCleanList()[1] or "Default")
-    local configDropdown: any = nil
-    local configInput: any = nil
-    
-    local function refreshDropdown(selectName: string?)
-        local list = getCleanList()
-        if configDropdown then
-            configDropdown:Refresh(list)
-            local target = selectName or currentConfig
-            if table.find(list, target) then
-                pcall(function() configDropdown:Set(target, true) end)
-            end
-        end
-    end
-    
-    -- Left Section Elements: Config Profile Management
-    configDropdown = leftSec:Dropdown({
-        Title = { en = "Select Profile", th = "เลือกโปรไฟล์" },
-        Desc = { en = "Choose an existing configuration profile", th = "เลือกโปรไฟล์คอนฟิกที่ต้องการใช้งาน" },
-        Values = getCleanList(),
-        Value = currentConfig,
-        AllowNone = false,
-        Callback = function(selected)
-            if selected and selected ~= "" then
-                currentConfig = selected
-                if configInput then
-                    pcall(function() configInput:Set(selected) end)
-                end
-            end
-        end,
-    })
-    
-    configInput = leftSec:Input({
-        Title = { en = "Profile Name", th = "ชื่อโปรไฟล์" },
-        Desc = { en = "Enter or edit profile name", th = "พิมพ์หรือแก้ไขชื่อโปรไฟล์" },
-        Placeholder = { en = "Profile name...", th = "ชื่อโปรไฟล์..." },
-        Value = currentConfig,
-        Icon = "file-text",
-        Callback = function(text)
-            if text and text:match("%S") then
-                currentConfig = text:match("^%s*(.-)%s*$")
-            end
-        end,
-    })
-    
-    leftSec:Button({
-        Title = { en = "Save Profile", th = "บันทึกโปรไฟล์" },
-        Desc = { en = "Save all current UI element values to this profile", th = "บันทึกค่าการตั้งค่าทั้งหมดลงในโปรไฟล์นี้" },
-        Icon = "save",
-        Callback = function()
-            local targetName = currentConfig
-            if not targetName or targetName == "" then targetName = "Default" end
-            local ok, err = engine:SaveConfig(targetName)
-            if ok then
-                refreshDropdown(targetName)
-                window:Notify({
-                    Title = { en = "Config Saved", th = "บันทึกสำเร็จ" },
-                    Content = {
-                        en = "Profile '" .. targetName .. "' saved successfully.",
-                        th = "บันทึกโปรไฟล์ '" .. targetName .. "' เรียบร้อยแล้ว",
-                    },
-                    Icon = "check-circle",
-                    Duration = 3,
-                })
-            else
-                window:Notify({
-                    Title = { en = "Save Failed", th = "บันทึกล้มเหลว" },
-                    Content = tostring(err or "Unknown error"),
-                    Icon = "alert-triangle",
-                    Duration = 3,
-                })
-            end
-        end,
-    })
-    
-    leftSec:Button({
-        Title = { en = "Load Profile", th = "โหลดโปรไฟล์" },
-        Desc = { en = "Apply saved values from selected profile to the UI", th = "นำค่าที่บันทึกไว้ในโปรไฟล์มาใช้กับ UI" },
-        Icon = "download",
-        Callback = function()
-            local targetName = currentConfig
-            if not targetName or targetName == "" then targetName = "Default" end
-            local ok, err = engine:LoadConfig(targetName, false)
-            if ok then
-                window:Notify({
-                    Title = { en = "Config Loaded", th = "โหลดสำเร็จ" },
-                    Content = {
-                        en = "Profile '" .. targetName .. "' loaded successfully.",
-                        th = "โหลดโปรไฟล์ '" .. targetName .. "' เรียบร้อยแล้ว",
-                    },
-                    Icon = "check-circle",
-                    Duration = 3,
-                })
-            else
-                window:Notify({
-                    Title = { en = "Load Failed", th = "โหลดล้มเหลว" },
-                    Content = tostring(err or "Config not found"),
-                    Icon = "alert-triangle",
-                    Duration = 3,
-                })
-            end
-        end,
-    })
-    
-    leftSec:Button({
-        Title = { en = "Delete Profile", th = "ลบโปรไฟล์" },
-        Desc = { en = "Permanently remove this configuration profile", th = "ลบโปรไฟล์การตั้งค่านี้ออกจากเครื่องถาวร" },
-        Icon = "trash-2",
-        Callback = function()
-            local targetName = currentConfig
-            if not targetName or targetName == "" then return end
-            window:Dialog({
-                Title = { en = "Delete Profile", th = "ยืนยันการลบโปรไฟล์" },
-                Content = {
-                    en = "Are you sure you want to permanently delete '" .. targetName .. "'? This action cannot be undone.",
-                    th = "คุณแน่ใจหรือไม่ว่าต้องการลบโปรไฟล์ '" .. targetName .. "' ถาวร? การกระทำนี้ไม่สามารถยกเลิกได้",
-                },
-                Icon = "trash-2",
-                Buttons = {
-                    { Title = { en = "Cancel", th = "ยกเลิก" }, Style = "Default" },
-                    {
-                        Title = { en = "Delete", th = "ลบ" },
-                        Style = "Danger",
-                        Callback = function()
-                            local ok = engine:DeleteConfig(targetName)
-                            if ok then
-                                currentConfig = "Default"
-                                if configInput then
-                                    pcall(function() configInput:Set("Default") end)
-                                end
-                                refreshDropdown("Default")
-                                window:Notify({
-                                    Title = { en = "Profile Deleted", th = "ลบโปรไฟล์สำเร็จ" },
-                                    Content = {
-                                        en = "Deleted profile '" .. targetName .. "'.",
-                                        th = "ลบโปรไฟล์ '" .. targetName .. "' เรียบร้อยแล้ว",
-                                    },
-                                    Icon = "trash",
-                                    Duration = 3,
-                                })
-                            end
-                        end,
-                    },
-                },
-            })
-        end,
-    })
-    
-    leftSec:Button({
-        Title = { en = "Refresh Profiles List", th = "รีเฟรชรายการโปรไฟล์" },
-        Desc = { en = "Rescan folder for newly added or renamed configs", th = "สแกนค้นหาไฟล์คอนฟิกใหม่หรือที่เปลี่ยนชื่อ" },
-        Icon = "rotate-cw",
-        Callback = function()
-            refreshDropdown()
-            window:Notify({
-                Title = { en = "Profiles Refreshed", th = "รีเฟรชสำเร็จ" },
-                Content = {
-                    en = "Refreshed configuration files list.",
-                    th = "อัปเดตรายการไฟล์คอนฟิกเรียบร้อยแล้ว",
-                },
-                Icon = "rotate-cw",
-                Duration = 2,
-            })
-        end,
-    })
-    
-    -- Right Section Elements: Automation & Sharing
-    rightSec:Toggle({
-        Title = { en = "Auto-Load Profile", th = "โหลดอัตโนมัติเมื่อเปิดสคริปต์" },
-        Desc = { en = "Automatically load the selected profile upon script boot", th = "โหลดโปรไฟล์ที่เลือกอัตโนมัติเมื่อเปิดใช้งานสคริปต์" },
-        Value = engine:GetAutoLoad(),
-        Callback = function(enabled)
-            engine:SetAutoLoad(enabled)
-            window:Notify({
-                Title = { en = "Auto-Load Config", th = "โหลดอัตโนมัติ" },
-                Content = if enabled then {
-                    en = "Auto-load enabled for '" .. currentConfig .. "'.",
-                    th = "เปิดการโหลดอัตโนมัติสำหรับ '" .. currentConfig .. "' แล้ว",
-                } else {
-                    en = "Auto-load disabled.",
-                    th = "ปิดการโหลดอัตโนมัติแล้ว",
-                },
-                Icon = "file-cog",
-                Duration = 2,
-            })
-        end,
-    })
-    
-    rightSec:Toggle({
-        Title = { en = "Auto-Save Profile", th = "บันทึกอัตโนมัติแบบเรียลไทม์" },
-        Desc = { en = "Save changes in real-time when controls are modified (0.5s debounce)", th = "บันทึกการตั้งค่าอัตโนมัติทันทีเมื่อมีการปรับเปลี่ยนค่า (หน่วงเวลา 0.5s)" },
-        Value = engine.AutoSaveEnabled,
-        Callback = function(enabled)
-            engine:SetAutoSave(enabled, currentConfig, 0.5)
-            window:Notify({
-                Title = { en = "Auto-Save Config", th = "บันทึกอัตโนมัติ" },
-                Content = if enabled then {
-                    en = "Realtime auto-save active.",
-                    th = "เปิดการบันทึกอัตโนมัติแล้ว",
-                } else {
-                    en = "Auto-save disabled.",
-                    th = "ปิดการบันทึกอัตโนมัติแล้ว",
-                },
-                Icon = "refresh-cw",
-                Duration = 2,
-            })
-        end,
-    })
+    -- Right Section Elements (Automation & Portability)
+    window:AddConfigAutoLoadToggle(rightSec)
+    window:AddConfigAutoSaveToggle(rightSec)
     
     rightSec:Divider({ en = "Portability & Sharing", th = "การส่งออกและนำเข้า" })
-    
-    local function getExecutorFunc(name: string): any
-        if engine and type((engine :: any).GetExecutorFunc) == "function" then
-            local fn = (engine :: any).GetExecutorFunc(name)
-            if fn ~= nil then return fn end
-        end
-        local genv = (type(getgenv) == "function" and getgenv()) or nil
-        if genv and genv[name] ~= nil then return genv[name] end
-        local s1, val1 = pcall(function() return getfenv()[name] end)
-        if s1 and val1 ~= nil then return val1 end
-        local s2, val2 = pcall(function()
-            local g = (rawget(getfenv(), "_G") :: any)
-            return g and g[name]
-        end)
-        if s2 and val2 ~= nil then return val2 end
-        return nil
-    end
-    
-    rightSec:Button({
-        Title = { en = "Export to Clipboard", th = "ส่งออกไปยังคลิปบอร์ด" },
-        Desc = { en = "Copy raw configuration JSON to your clipboard", th = "คัดลอกข้อความ JSON ของคอนฟิกนี้ลงคลิปบอร์ด" },
-        Icon = "copy",
-        Callback = function()
-            local targetName = currentConfig
-            local data, err = engine:ExportConfig(targetName)
-            if data then
-                local setclip = getExecutorFunc("setclipboard") or getExecutorFunc("toclipboard")
-                if type(setclip) == "function" then
-                    pcall(setclip, data)
-                end
-                window:Notify({
-                    Title = { en = "Export Successful", th = "ส่งออกสำเร็จ" },
-                    Content = {
-                        en = "Profile '" .. targetName .. "' JSON copied to clipboard!",
-                        th = "คัดลอก JSON ของโปรไฟล์ '" .. targetName .. "' ลงคลิปบอร์ดแล้ว",
-                    },
-                    Icon = "check-circle",
-                    Duration = 3,
-                })
-            else
-                window:Notify({
-                    Title = { en = "Export Failed", th = "ส่งออกล้มเหลว" },
-                    Content = tostring(err or "Failed to export"),
-                    Icon = "alert-triangle",
-                    Duration = 3,
-                })
-            end
-        end,
-    })
-    
-    rightSec:Button({
-        Title = { en = "Import from Clipboard", th = "นำเข้าจากคลิปบอร์ด" },
-        Desc = { en = "Paste JSON string from clipboard and hydrate into UI", th = "นำข้อความ JSON จากคลิปบอร์ดมาบันทึกและปรับใช้กับ UI" },
-        Icon = "upload",
-        Callback = function()
-            local getclip = getExecutorFunc("getclipboard")
-            local raw = if type(getclip) == "function" then getclip() else nil
-            if not raw or type(raw) ~= "string" or raw == "" then
-                window:Notify({
-                    Title = { en = "Import Failed", th = "นำเข้าล้มเหลว" },
-                    Content = {
-                        en = "Clipboard is empty or inaccessible.",
-                        th = "คลิปบอร์ดว่างเปล่าหรือไม่สามารถเข้าถึงได้",
-                    },
-                    Icon = "alert-triangle",
-                    Duration = 3,
-                })
-                return
-            end
-            
-            local targetName = currentConfig
-            local ok, err = engine:ImportConfig(targetName, raw)
-            if ok then
-                engine:LoadConfig(targetName, false)
-                refreshDropdown(targetName)
-                window:Notify({
-                    Title = { en = "Import Successful", th = "นำเข้าสำเร็จ" },
-                    Content = {
-                        en = "Configuration imported and loaded successfully!",
-                        th = "นำเข้าและโหลดการตั้งค่าเรียบร้อยแล้ว",
-                    },
-                    Icon = "check-circle",
-                    Duration = 3,
-                })
-            else
-                window:Notify({
-                    Title = { en = "Import Failed", th = "นำเข้าล้มเหลว" },
-                    Content = "Invalid JSON: " .. tostring(err or "corrupt"),
-                    Icon = "alert-triangle",
-                    Duration = 3,
-                })
-            end
-        end,
-    })
-    
-    rightSec:Button({
-        Title = { en = "Reset to Factory Defaults", th = "รีเซ็ตค่าเริ่มต้นโรงงาน" },
-        Desc = { en = "Revert all controls back to initial script values", th = "คืนค่าการตั้งค่าทั้งหมดกลับเป็นค่าเริ่มต้นดั้งเดิม" },
-        Icon = "rotate-ccw",
-        Callback = function()
-            window:Dialog({
-                Title = { en = "Reset to Defaults", th = "ยืนยันการรีเซ็ต" },
-                Content = {
-                    en = "Are you sure you want to reset all controls to factory default values? Any unsaved changes will be lost.",
-                    th = "คุณแน่ใจหรือไม่ว่าต้องการรีเซ็ตการตั้งค่าทั้งหมดกลับเป็นค่าเริ่มต้นโรงงาน? การตั้งค่าที่ไม่ได้บันทึกจะหายไป",
-                },
-                Icon = "alert-triangle",
-                Buttons = {
-                    { Title = { en = "Cancel", th = "ยกเลิก" }, Style = "Default" },
-                    {
-                        Title = { en = "Reset All", th = "รีเซ็ตทั้งหมด" },
-                        Style = "Danger",
-                        Callback = function()
-                            engine:ResetToDefaults(false)
-                            window:Notify({
-                                Title = { en = "Reset Complete", th = "รีเซ็ตสำเร็จ" },
-                                Content = {
-                                    en = "All controls reverted to factory default values.",
-                                    th = "คืนค่าการตั้งค่าทั้งหมดกลับเป็นค่าเริ่มต้นโรงงานแล้ว",
-                                },
-                                Icon = "check",
-                                Duration = 3,
-                            })
-                        end,
-                    },
-                },
-            })
-        end,
-    })
+    window:AddConfigExportButton(rightSec)
+    window:AddConfigImportButton(rightSec)
+    window:AddConfigResetButton(rightSec)
 end
 
 function Window:AddConfigTab(props: any?)
@@ -13058,6 +13535,54 @@ function Window:Destroy()
 end
 
 -- Aliases for API flexibility
+
+Window.ConfigDropdown = Window.AddConfigDropdown
+Window.CreateConfigDropdown = Window.AddConfigDropdown
+Window.DropdownConfig = Window.AddConfigDropdown
+
+Window.ConfigInput = Window.AddConfigInput
+Window.CreateConfigInput = Window.AddConfigInput
+Window.InputNameConfig = Window.AddConfigInput
+Window.ConfigNameInput = Window.AddConfigInput
+
+Window.ConfigSaveButton = Window.AddConfigSaveButton
+Window.CreateConfigSaveButton = Window.AddConfigSaveButton
+Window.ButtonSave = Window.AddConfigSaveButton
+Window.ConfigSave = Window.AddConfigSaveButton
+
+Window.ConfigLoadButton = Window.AddConfigLoadButton
+Window.CreateConfigLoadButton = Window.AddConfigLoadButton
+Window.ButtonLoad = Window.AddConfigLoadButton
+Window.ConfigLoad = Window.AddConfigLoadButton
+
+Window.ConfigDeleteButton = Window.AddConfigDeleteButton
+Window.CreateConfigDeleteButton = Window.AddConfigDeleteButton
+Window.ButtonDelete = Window.AddConfigDeleteButton
+Window.ConfigDelete = Window.AddConfigDeleteButton
+
+Window.ConfigAutoLoadToggle = Window.AddConfigAutoLoadToggle
+Window.CreateConfigAutoLoadToggle = Window.AddConfigAutoLoadToggle
+Window.ToggleAutoLoad = Window.AddConfigAutoLoadToggle
+
+Window.ConfigAutoSaveToggle = Window.AddConfigAutoSaveToggle
+Window.CreateConfigAutoSaveToggle = Window.AddConfigAutoSaveToggle
+Window.ToggleAutoSave = Window.AddConfigAutoSaveToggle
+
+Window.ConfigRefreshButton = Window.AddConfigRefreshButton
+Window.CreateConfigRefreshButton = Window.AddConfigRefreshButton
+
+Window.ConfigResetButton = Window.AddConfigResetButton
+Window.CreateConfigResetButton = Window.AddConfigResetButton
+
+Window.ConfigExportButton = Window.AddConfigExportButton
+Window.CreateConfigExportButton = Window.AddConfigExportButton
+
+Window.ConfigImportButton = Window.AddConfigImportButton
+Window.CreateConfigImportButton = Window.AddConfigImportButton
+
+Window.ConfigElements = Window.CreateConfigElements
+Window.AddConfigElements = Window.CreateConfigElements
+
 Window.CreateTab = Window.Tab
 Window.AddTab = Window.Tab
 Window.CreateSection = Window.Section
