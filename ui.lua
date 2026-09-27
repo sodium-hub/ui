@@ -10475,7 +10475,9 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         userCard.AutoButtonColor = false
         userCard.Text = ""
         userCard.ZIndex = 5
+        userCard.Parent = sidebarFooter
         Theme.Bind(userCard, "BackgroundColor3", "Card")
+        Tweener.BindPressFeedback(userCard, userCard, 0.98)
         
         local userCorner = Instance.new("UICorner")
         userCorner.CornerRadius = Theme.Radii.Card
