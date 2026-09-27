@@ -3240,13 +3240,14 @@ function Container:_initViewportScaling()
     end))
 end
 
-function Container.new(title: string)
+function Container.new(title: any)
     cleanupPreviousInstances()
     
     local self = setmetatable({}, Container)
     
+    local rawTitle = if type(title) == "table" then (title.en or title.EN or title.th or title.TH or "SodiumUI") else tostring(title or "SodiumUI")
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "SodiumUI_" .. (title:gsub("%s+", "_"))
+    screenGui.Name = "SodiumUI_" .. (rawTitle:gsub("%s+", "_"))
     screenGui:SetAttribute("SodiumUI_Root", true)
     screenGui.ResetOnSpawn = false
     screenGui.IgnoreGuiInset = true
@@ -3416,10 +3417,15 @@ function FS.readFile(path: string): string?
     local readfile = getExecutorFunc("readfile")
     if type(readfile) ~= "function" then return nil end
     local clean = FS.normalizePath(path)
-    if not FS.isFile(clean) then return nil end
     local ok, res = pcall(readfile, clean)
     if ok and type(res) == "string" then
         return res
+    end
+    if clean ~= path then
+        local ok2, res2 = pcall(readfile, path)
+        if ok2 and type(res2) == "string" then
+            return res2
+        end
     end
     return nil
 end
@@ -3443,11 +3449,13 @@ function FS.writeFile(path: string, content: string): (boolean, string?)
 end
 
 function FS.deleteFile(path: string): boolean
-    local delfile = getExecutorFunc("delfile")
+    local delfile = getExecutorFunc("delfile") or getExecutorFunc("deletefile") or getExecutorFunc("removefile")
     if type(delfile) ~= "function" then return false end
     local clean = FS.normalizePath(path)
-    if not FS.isFile(clean) then return true end
     local ok = pcall(delfile, clean)
+    if not ok and clean ~= path then
+        ok = pcall(delfile, path)
+    end
     return ok
 end
 
@@ -3563,7 +3571,7 @@ function ConfigFile:Register(key: string, element: any)
         self.Engine:RegisterFlag(
             key,
             function() return element:Get() end,
-            function(v, skip) element:Set(v, skip) end,
+            function(v, skip, anim) element:Set(v, skip, anim) end,
             element:Get()
         )
     end
@@ -3603,9 +3611,20 @@ export type FlagHandler = {
     Default: any?,
 }
 
-function ConfigEngine.new(folderName: string?)
+function ConfigEngine.new(folderName: string?, perMap: (boolean | string)?)
     local self = setmetatable({}, ConfigEngine)
-    self.FolderName = FS.normalizePath(folderName or "SodiumHub")
+    local baseFolder = FS.normalizePath(folderName or "SodiumHub")
+    local subMap: string? = nil
+    if perMap == true then
+        local pid = (game and game.PlaceId) or 0
+        subMap = tostring(pid)
+    elseif type(perMap) == "string" and perMap ~= "" then
+        subMap = FS.normalizePath(perMap)
+    end
+    
+    self.BaseFolder = baseFolder
+    self.MapId = subMap
+    self.FolderName = if subMap then baseFolder .. "/" .. subMap else baseFolder
     self.ConfigsFolder = self.FolderName .. "/configs"
     self.StateFile = self.FolderName .. "/__state.json"
     
@@ -3644,6 +3663,27 @@ function ConfigEngine.new(folderName: string?)
     return self
 end
 
+local function deterministicEncode(tbl: { [string]: any }): string
+    local keys = {}
+    for k in pairs(tbl) do
+        table.insert(keys, tostring(k))
+    end
+    table.sort(keys)
+    local parts = {}
+    for _, k in ipairs(keys) do
+        local v = tbl[k]
+        local valStr: string
+        if type(v) == "table" then
+            local ok, s = pcall(HttpService.JSONEncode, HttpService, v)
+            valStr = if ok and s then s else tostring(v)
+        else
+            valStr = tostring(v)
+        end
+        table.insert(parts, string.format("%s:%s", k, valStr))
+    end
+    return table.concat(parts, "|")
+end
+
 function ConfigEngine:RegisterFlag(
     flag: string,
     getter: () -> any,
@@ -3653,7 +3693,13 @@ function ConfigEngine:RegisterFlag(
     assert(type(flag) == "string" and flag ~= "", "[SodiumUI.Config] Invalid flag name")
     
     local initial = if defaultVal ~= nil then defaultVal else getter()
-    self.Flags[flag] = initial
+    local existing = self.Flags[flag]
+    if existing ~= nil then
+        pcall(setter, existing, true, false)
+    else
+        self.Flags[flag] = initial
+    end
+    
     self._handlers[flag] = {
         Get = getter,
         Set = setter,
@@ -3740,6 +3786,10 @@ end
 
 function ConfigEngine:SetAutoSave(enabled: boolean, configName: string?, delaySeconds: number?)
     self.AutoSaveEnabled = enabled
+    if not enabled and self._autoSaveThread then
+        task.cancel(self._autoSaveThread)
+        self._autoSaveThread = nil
+    end
     if configName and configName ~= "" then
         self.ActiveConfig = configName
     end
@@ -3756,7 +3806,7 @@ function ConfigEngine:_triggerAutoSave()
     end
     self._autoSaveThread = task.delay(self.AutoSaveDelay, function()
         self._autoSaveThread = nil
-        if not self._isBatchLoading then
+        if self.AutoSaveEnabled and not self._isBatchLoading then
             self:SaveConfig(self.ActiveConfig or "Default")
         end
     end)
@@ -3781,11 +3831,9 @@ function ConfigEngine:SaveConfig(configName: string): (boolean, string?)
         end
     end
     
-    local sFlags, flagsJson = pcall(HttpService.JSONEncode, HttpService, stateMap)
-    
-    -- Step 2: Smart Diffing (Zero Resource Waste)
-    -- If the flags content is identical to our last saved snapshot, skip disk write completely!
-    if sFlags and flagsJson and self._lastSavedSnapshots[configName] == flagsJson then
+    -- Step 2: Smart Diffing (Zero Resource Waste, 100% Deterministic)
+    local currentSnapshot = deterministicEncode(stateMap)
+    if self._lastSavedSnapshots[configName] == currentSnapshot then
         for _, cb in ipairs(self._configSavedListeners) do
             task.spawn(cb, configName, false)
         end
@@ -3819,8 +3867,10 @@ function ConfigEngine:SaveConfig(configName: string): (boolean, string?)
             return false, tostring(writeErr)
         end
         
-        self._lastSavedSnapshots[configName] = if sFlags then flagsJson else jsonString
-        self:_writeState({ selected = configName })
+        self._lastSavedSnapshots[configName] = currentSnapshot
+        pcall(function()
+            self:_writeState({ selected = configName })
+        end)
         
         for _, cb in ipairs(self._configSavedListeners) do
             task.spawn(cb, configName, true)
@@ -3828,7 +3878,7 @@ function ConfigEngine:SaveConfig(configName: string): (boolean, string?)
         return true, "Config saved successfully"
     else
         self.InMemoryStorage[configName] = jsonString
-        self._lastSavedSnapshots[configName] = if sFlags then flagsJson else jsonString
+        self._lastSavedSnapshots[configName] = currentSnapshot
         
         for _, cb in ipairs(self._configSavedListeners) do
             task.spawn(cb, configName, true)
@@ -3869,8 +3919,7 @@ function ConfigEngine:LoadConfig(configName: string, silent: boolean?): (boolean
     -- ========================================================================
     self._isBatchLoading = true
     self.ActiveConfig = configName
-    local sFlags, flagsJson = pcall(HttpService.JSONEncode, HttpService, flags)
-    self._lastSavedSnapshots[configName] = if sFlags then flagsJson else jsonString
+    self._lastSavedSnapshots[configName] = deterministicEncode(flags)
     
     local updatedCount = 0
     local pendingCallbacks = {}
@@ -3892,7 +3941,7 @@ function ConfigEngine:LoadConfig(configName: string, silent: boolean?): (boolean
         end
     end
     
-    -- Phase 2: Deferred isolated callbacks execution (if not silent)
+    -- Phase 2: Deferred isolated callbacks execution while maintaining _isBatchLoading = true
     if not silent and #pendingCallbacks > 0 then
         task.defer(function()
             for _, item in ipairs(pendingCallbacks) do
@@ -3907,12 +3956,16 @@ function ConfigEngine:LoadConfig(configName: string, silent: boolean?): (boolean
                     end
                 end
             end
+            self._isBatchLoading = false
         end)
+    else
+        self._isBatchLoading = false
     end
     
     -- Phase 3: Update state file
-    self:_writeState({ selected = configName })
-    self._isBatchLoading = false
+    pcall(function()
+        self:_writeState({ selected = configName })
+    end)
     
     local elapsedMs = math.floor((os.clock() - startTime) * 1000)
     local stats = {
@@ -3947,14 +4000,15 @@ function ConfigEngine:ImportConfig(configName: string, jsonString: string): (boo
     end
     
     local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
+    local snapshot = deterministicEncode(decoded.flags)
     if FS.hasFS() then
         local ok, err = FS.writeFile(filePath, jsonString)
         if not ok then return false, tostring(err) end
-        self._lastSavedSnapshots[configName] = jsonString
+        self._lastSavedSnapshots[configName] = snapshot
         return true, "Imported and saved successfully"
     else
         self.InMemoryStorage[configName] = jsonString
-        self._lastSavedSnapshots[configName] = jsonString
+        self._lastSavedSnapshots[configName] = snapshot
         return true, "Imported to memory"
     end
 end
@@ -4073,8 +4127,12 @@ function ConfigEngine:SetAutoLoad(enabled: boolean)
 end
 
 function ConfigEngine:CheckAndAutoLoad(): (boolean, string?)
+    if self._hasAutoLoaded then
+        return false, "Auto-load already executed"
+    end
     local state = self:_readState()
     if state.autoload == true and state.selected and state.selected ~= "" then
+        self._hasAutoLoaded = true
         return self:LoadConfig(state.selected, false)
     end
     return false, "Auto-load disabled"
@@ -4087,6 +4145,8 @@ end
 
 function ConfigEngine:Init(window: any)
     self.Window = window
+    if self._initialized then return end
+    self._initialized = true
     task.defer(function()
         pcall(function()
             self:CheckAndAutoLoad()
@@ -4096,26 +4156,36 @@ end
 
 function ConfigEngine:ResetToDefaults(silent: boolean?)
     self._isBatchLoading = true
+    local pending = {}
     for flag, handler in pairs(self._handlers) do
         if handler.Default ~= nil then
             self.Flags[flag] = handler.Default
             pcall(handler.Set, handler.Default, true, false)
-            
             if not silent then
-                task.spawn(function()
-                    pcall(handler.Set, handler.Default, false, false)
-                    local listeners = self._listeners[flag]
-                    if listeners then
-                        for _, cb in ipairs(listeners) do
-                            task.spawn(cb, handler.Default)
-                        end
-                    end
-                end)
+                table.insert(pending, { handler = handler, val = handler.Default, flag = flag })
             end
         end
     end
-    self._isBatchLoading = false
+    
+    if not silent and #pending > 0 then
+        task.defer(function()
+            for _, item in ipairs(pending) do
+                pcall(item.handler.Set, item.val, false, false)
+                local listeners = self._listeners[item.flag]
+                if listeners then
+                    for _, cb in ipairs(listeners) do
+                        task.spawn(cb, item.val)
+                    end
+                end
+            end
+            self._isBatchLoading = false
+        end)
+    else
+        self._isBatchLoading = false
+    end
 end
+
+(ConfigEngine :: any).GetExecutorFunc = getExecutorFunc
 
 return ConfigEngine
 end
@@ -7275,8 +7345,9 @@ function Toggle.new(parent: Instance, configEngine: any, props: any)
     if self.Flag and configEngine then
         configEngine:RegisterFlag(self.Flag, function()
             return self.Value
-        end, function(val)
-            self:Set(val)
+        end, function(val, skipCallback, animate)
+            if val == nil then return end
+            self:Set(val == true, skipCallback, animate)
         end)
     end
     
@@ -7284,26 +7355,34 @@ function Toggle.new(parent: Instance, configEngine: any, props: any)
     return self
 end
 
-function Toggle:Set(state: boolean, skipCallback: boolean?)
-    self.Value = state
+function Toggle:Set(state: boolean, skipCallback: boolean?, animate: boolean?)
+    self.Value = (state == true)
     
     local targetBg = if self.Value then Theme.GetToken("Accent") else Theme.GetToken("SurfaceActive")
     local targetStroke = if self.Value then Theme.GetToken("BorderAccent") else Theme.GetToken("BorderSubtle")
     local targetIconTrans = if self.Value then 0 else 1
     
-    -- Smooth gradual color and icon fade
-    Tweener.Tween(self.CheckSquare, Tweener.Info.Normal, {
-        BackgroundColor3 = targetBg,
-    })
-    Tweener.Tween(self.CheckStroke, Tweener.Info.Normal, {
-        Color = targetStroke,
-    })
-    Tweener.Tween(self.CheckIcon, Tweener.Info.Normal, {
-        ImageTransparency = targetIconTrans,
-    })
+    if animate == false then
+        self.CheckSquare.BackgroundColor3 = targetBg
+        self.CheckStroke.Color = targetStroke
+        self.CheckIcon.ImageTransparency = targetIconTrans
+    else
+        Tweener.Tween(self.CheckSquare, Tweener.Info.Normal, {
+            BackgroundColor3 = targetBg,
+        })
+        Tweener.Tween(self.CheckStroke, Tweener.Info.Normal, {
+            Color = targetStroke,
+        })
+        Tweener.Tween(self.CheckIcon, Tweener.Info.Normal, {
+            ImageTransparency = targetIconTrans,
+        })
+    end
     
     if not skipCallback and self.Callback then
-        self.Callback(self.Value)
+        local ok, err = pcall(self.Callback, self.Value)
+        if not ok then
+            warn("[SodiumUI.Toggle] Callback error:", err)
+        end
     end
 end
 
@@ -7726,8 +7805,12 @@ function Slider.new(parent: Instance, configEngine: any, props: any)
     if self.Flag and configEngine then
         configEngine:RegisterFlag(self.Flag, function()
             return self.Value
-        end, function(val)
-            self:Set(val, false, true)
+        end, function(val, skipCallback, animate)
+            if type(val) ~= "number" then
+                val = tonumber(val)
+            end
+            if val == nil then return end
+            self:Set(val, skipCallback, animate)
         end)
     end
     
@@ -7739,7 +7822,13 @@ function Slider:Set(newVal: number, skipCallback: boolean?, animate: boolean?)
     if self._isUpdating then return end
     self._isUpdating = true
     
-    self.Value = math.clamp(newVal, self.Min, self.Max)
+    local num = tonumber(newVal)
+    if num == nil then
+        self._isUpdating = false
+        return
+    end
+    
+    self.Value = math.clamp(num, self.Min, self.Max)
     
     local pct = (self.Value - self.Min) / math.max(1e-5, (self.Max - self.Min))
     
@@ -7775,7 +7864,10 @@ function Slider:Set(newVal: number, skipCallback: boolean?, animate: boolean?)
     end
     
     if not skipCallback and self.Callback then
-        self.Callback(self.Value)
+        local ok, err = pcall(self.Callback, self.Value)
+        if not ok then
+            warn("[SodiumUI.Slider] Callback error:", err)
+        end
     end
     
     self._isUpdating = false
@@ -8287,8 +8379,8 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
     if self.Flag and configEngine then
         configEngine:RegisterFlag(self.Flag, function()
             return self.Selected
-        end, function(val)
-            self:Set(val)
+        end, function(val, skipCallback)
+            self:Set(val, skipCallback)
         end)
     end
     
@@ -8395,7 +8487,29 @@ end
 function Dropdown:Set(val: any, skipCallback: boolean?)
     if self.Multi then
         if type(val) == "table" then
-            self.Selected = table.clone(val)
+            local isDict = false
+            for k, _ in pairs(val) do
+                if type(k) ~= "number" then
+                    isDict = true
+                    break
+                end
+            end
+            if isDict then
+                local list = {}
+                for k, v in pairs(val) do
+                    if v == true then
+                        table.insert(list, tostring(k))
+                    end
+                end
+                table.sort(list)
+                self.Selected = list
+            else
+                local list = {}
+                for _, v in ipairs(val) do
+                    table.insert(list, tostring(v))
+                end
+                self.Selected = list
+            end
         elseif val ~= nil and val ~= "" then
             self.Selected = { tostring(val) }
         else
@@ -8418,7 +8532,10 @@ function Dropdown:Set(val: any, skipCallback: boolean?)
     end
     
     if not skipCallback and self.Callback then
-        self.Callback(self.Selected)
+        local ok, err = pcall(self.Callback, self.Selected)
+        if not ok then
+            warn("[SodiumUI.Dropdown] Callback error:", err)
+        end
     end
 end
 
@@ -8721,8 +8838,9 @@ function Input.new(parent: Instance, configEngine: any, props: any)
     if self.Flag and configEngine then
         configEngine:RegisterFlag(self.Flag, function()
             return self.Value
-        end, function(val)
-            self:Set(tostring(val))
+        end, function(val, skipCallback)
+            local str = if val ~= nil then tostring(val) else ""
+            self:Set(str, skipCallback)
         end)
     end
     
@@ -8731,11 +8849,15 @@ function Input.new(parent: Instance, configEngine: any, props: any)
 end
 
 function Input:Set(text: string, skipCallback: boolean?)
-    self.Value = text
-    self.TextBox.Text = text
-    self.ClearBtn.Visible = text ~= ""
+    local cleanText = if text ~= nil then tostring(text) else ""
+    self.Value = cleanText
+    self.TextBox.Text = cleanText
+    self.ClearBtn.Visible = cleanText ~= ""
     if not skipCallback and self.Callback then
-        self.Callback(self.Value)
+        local ok, err = pcall(self.Callback, self.Value)
+        if not ok then
+            warn("[SodiumUI.Input] Callback error:", err)
+        end
     end
 end
 
@@ -9178,8 +9300,9 @@ function Keybind.new(parent: Instance, configEngine: any, props: any)
     if self.Flag and configEngine then
         configEngine:RegisterFlag(self.Flag, function()
             return self.Value
-        end, function(val)
-            self:Set(tostring(val))
+        end, function(val, skipCallback)
+            if val == nil then return end
+            self:Set(val, skipCallback)
         end)
     end
     
@@ -9187,11 +9310,23 @@ function Keybind.new(parent: Instance, configEngine: any, props: any)
     return self
 end
 
-function Keybind:Set(key: string, skipCallback: boolean?)
-    self.Value = key
+function Keybind:Set(key: any, skipCallback: boolean?)
+    local cleanKey: string
+    if typeof(key) == "EnumItem" then
+        cleanKey = key.Name
+    elseif type(key) == "string" then
+        cleanKey = string.gsub(key, "^Enum%.KeyCode%.", "")
+        cleanKey = string.gsub(cleanKey, "^Enum%.", "")
+    else
+        cleanKey = tostring(key or "")
+    end
+    self.Value = cleanKey
     self.BadgeText.Text = self.Value
     if not skipCallback and self.Callback then
-        self.Callback(self.Value)
+        local ok, err = pcall(self.Callback, self.Value)
+        if not ok then
+            warn("[SodiumUI.Keybind] Callback error:", err)
+        end
     end
 end
 
@@ -10268,9 +10403,9 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
     -- Register base size with Container for dynamic responsive scaling
     containerManager:SetBaseWindowSize(Vector2.new(defaultSize.X.Offset, defaultSize.Y.Offset))
 
-    -- Main Frame (Clean rounded window, centered via AnchorPoint 0.5, 0.5)
+    local rawTitleStr = if type(windowTitle) == "table" then (windowTitle.en or windowTitle.EN or windowTitle.th or windowTitle.TH or "SodiumUI") else tostring(windowTitle or "SodiumUI")
     local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "SodiumWindow_" .. windowTitle
+    mainFrame.Name = "SodiumWindow_" .. rawTitleStr
     mainFrame.Size = defaultSize
     mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     mainFrame.Position = UDim2.fromScale(0.5, 0.5)
@@ -10399,7 +10534,11 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
     titleLabel.AutomaticSize = Enum.AutomaticSize.X
     titleLabel.BackgroundTransparency = 1
     Theme.ApplyTypography(titleLabel, "Title", "Title")
-    titleLabel.Text = windowTitle
+    if type(windowTitle) == "table" then
+        Locale.Bind(titleLabel, "Text", windowTitle)
+    else
+        titleLabel.Text = tostring(windowTitle or "Sodium Hub")
+    end
     titleLabel.TextColor3 = Theme.GetToken("TextPrimary")
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.LayoutOrder = 2
@@ -10815,7 +10954,11 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         authorLabel.AutomaticSize = Enum.AutomaticSize.X
         authorLabel.BackgroundTransparency = 1
         Theme.ApplyTypography(authorLabel, "Body", "Sub")
-        authorLabel.Text = props.Author
+        if type(props.Author) == "table" then
+            Locale.Bind(authorLabel, "Text", props.Author)
+        else
+            authorLabel.Text = tostring(props.Author)
+        end
         authorLabel.TextColor3 = Theme.GetToken("Placeholder")
         authorLabel.TextXAlignment = Enum.TextXAlignment.Left
         authorLabel.LayoutOrder = 5
@@ -12069,13 +12212,16 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     local leftSec: any
     local rightSec: any
     
+    local defaultFilesTitle = { en = "Configuration Profiles", th = "จัดการโปรไฟล์คอนฟิก" }
+    local defaultToolsTitle = { en = "Automation & Portability", th = "ระบบอัตโนมัติและส่งออก" }
+    
     if type(container.Section) == "function" then
         if isTwoCol then
-            leftSec = container:Section({ Title = props.FilesTitle or "Configuration Profiles", Column = "Left" })
-            rightSec = container:Section({ Title = props.ToolsTitle or "Automation & Portability", Column = "Right" })
+            leftSec = container:Section({ Title = props.FilesTitle or defaultFilesTitle, Column = "Left" })
+            rightSec = container:Section({ Title = props.ToolsTitle or defaultToolsTitle, Column = "Right" })
         else
-            leftSec = container:Section({ Title = props.FilesTitle or "Configuration Profiles" })
-            rightSec = container:Section({ Title = props.ToolsTitle or "Automation & Portability" })
+            leftSec = container:Section({ Title = props.FilesTitle or defaultFilesTitle })
+            rightSec = container:Section({ Title = props.ToolsTitle or defaultToolsTitle })
         end
     else
         leftSec = container
@@ -12107,8 +12253,8 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     
     -- Left Section Elements: Config Profile Management
     configDropdown = leftSec:Dropdown({
-        Title = "Select Profile",
-        Desc = "Choose an existing configuration profile",
+        Title = { en = "Select Profile", th = "เลือกโปรไฟล์" },
+        Desc = { en = "Choose an existing configuration profile", th = "เลือกโปรไฟล์คอนฟิกที่ต้องการใช้งาน" },
         Values = getCleanList(),
         Value = currentConfig,
         AllowNone = false,
@@ -12123,9 +12269,9 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     })
     
     configInput = leftSec:Input({
-        Title = "Profile Name",
-        Desc = "Enter or edit profile name",
-        Placeholder = "Profile name...",
+        Title = { en = "Profile Name", th = "ชื่อโปรไฟล์" },
+        Desc = { en = "Enter or edit profile name", th = "พิมพ์หรือแก้ไขชื่อโปรไฟล์" },
+        Placeholder = { en = "Profile name...", th = "ชื่อโปรไฟล์..." },
         Value = currentConfig,
         Icon = "file-text",
         Callback = function(text)
@@ -12136,8 +12282,8 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     })
     
     leftSec:Button({
-        Title = "Save Profile",
-        Desc = "Save all current UI element values to this profile",
+        Title = { en = "Save Profile", th = "บันทึกโปรไฟล์" },
+        Desc = { en = "Save all current UI element values to this profile", th = "บันทึกค่าการตั้งค่าทั้งหมดลงในโปรไฟล์นี้" },
         Icon = "save",
         Callback = function()
             local targetName = currentConfig
@@ -12146,14 +12292,17 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
             if ok then
                 refreshDropdown(targetName)
                 window:Notify({
-                    Title = "Config Saved",
-                    Content = "Profile '" .. targetName .. "' saved successfully.",
+                    Title = { en = "Config Saved", th = "บันทึกสำเร็จ" },
+                    Content = {
+                        en = "Profile '" .. targetName .. "' saved successfully.",
+                        th = "บันทึกโปรไฟล์ '" .. targetName .. "' เรียบร้อยแล้ว",
+                    },
                     Icon = "check-circle",
                     Duration = 3,
                 })
             else
                 window:Notify({
-                    Title = "Save Failed",
+                    Title = { en = "Save Failed", th = "บันทึกล้มเหลว" },
                     Content = tostring(err or "Unknown error"),
                     Icon = "alert-triangle",
                     Duration = 3,
@@ -12163,8 +12312,8 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     })
     
     leftSec:Button({
-        Title = "Load Profile",
-        Desc = "Apply saved values from selected profile to the UI",
+        Title = { en = "Load Profile", th = "โหลดโปรไฟล์" },
+        Desc = { en = "Apply saved values from selected profile to the UI", th = "นำค่าที่บันทึกไว้ในโปรไฟล์มาใช้กับ UI" },
         Icon = "download",
         Callback = function()
             local targetName = currentConfig
@@ -12172,14 +12321,17 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
             local ok, err = engine:LoadConfig(targetName, false)
             if ok then
                 window:Notify({
-                    Title = "Config Loaded",
-                    Content = "Profile '" .. targetName .. "' loaded successfully.",
+                    Title = { en = "Config Loaded", th = "โหลดสำเร็จ" },
+                    Content = {
+                        en = "Profile '" .. targetName .. "' loaded successfully.",
+                        th = "โหลดโปรไฟล์ '" .. targetName .. "' เรียบร้อยแล้ว",
+                    },
                     Icon = "check-circle",
                     Duration = 3,
                 })
             else
                 window:Notify({
-                    Title = "Load Failed",
+                    Title = { en = "Load Failed", th = "โหลดล้มเหลว" },
                     Content = tostring(err or "Config not found"),
                     Icon = "alert-triangle",
                     Duration = 3,
@@ -12189,28 +12341,38 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     })
     
     leftSec:Button({
-        Title = "Delete Profile",
-        Desc = "Permanently remove this configuration profile",
+        Title = { en = "Delete Profile", th = "ลบโปรไฟล์" },
+        Desc = { en = "Permanently remove this configuration profile", th = "ลบโปรไฟล์การตั้งค่านี้ออกจากเครื่องถาวร" },
         Icon = "trash-2",
         Callback = function()
             local targetName = currentConfig
             if not targetName or targetName == "" then return end
             window:Dialog({
-                Title = "Delete Profile",
-                Content = "Are you sure you want to permanently delete '" .. targetName .. "'? This action cannot be undone.",
+                Title = { en = "Delete Profile", th = "ยืนยันการลบโปรไฟล์" },
+                Content = {
+                    en = "Are you sure you want to permanently delete '" .. targetName .. "'? This action cannot be undone.",
+                    th = "คุณแน่ใจหรือไม่ว่าต้องการลบโปรไฟล์ '" .. targetName .. "' ถาวร? การกระทำนี้ไม่สามารถยกเลิกได้",
+                },
                 Icon = "trash-2",
                 Buttons = {
-                    { Title = "Cancel", Style = "Default" },
+                    { Title = { en = "Cancel", th = "ยกเลิก" }, Style = "Default" },
                     {
-                        Title = "Delete",
+                        Title = { en = "Delete", th = "ลบ" },
                         Style = "Danger",
                         Callback = function()
                             local ok = engine:DeleteConfig(targetName)
                             if ok then
+                                currentConfig = "Default"
+                                if configInput then
+                                    pcall(function() configInput:Set("Default") end)
+                                end
                                 refreshDropdown("Default")
                                 window:Notify({
-                                    Title = "Profile Deleted",
-                                    Content = "Deleted profile '" .. targetName .. "'.",
+                                    Title = { en = "Profile Deleted", th = "ลบโปรไฟล์สำเร็จ" },
+                                    Content = {
+                                        en = "Deleted profile '" .. targetName .. "'.",
+                                        th = "ลบโปรไฟล์ '" .. targetName .. "' เรียบร้อยแล้ว",
+                                    },
                                     Icon = "trash",
                                     Duration = 3,
                                 })
@@ -12223,14 +12385,17 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     })
     
     leftSec:Button({
-        Title = "Refresh Profiles List",
-        Desc = "Rescan folder for newly added or renamed configs",
+        Title = { en = "Refresh Profiles List", th = "รีเฟรชรายการโปรไฟล์" },
+        Desc = { en = "Rescan folder for newly added or renamed configs", th = "สแกนค้นหาไฟล์คอนฟิกใหม่หรือที่เปลี่ยนชื่อ" },
         Icon = "rotate-cw",
         Callback = function()
             refreshDropdown()
             window:Notify({
-                Title = "Profiles Refreshed",
-                Content = "Refreshed configuration files list.",
+                Title = { en = "Profiles Refreshed", th = "รีเฟรชสำเร็จ" },
+                Content = {
+                    en = "Refreshed configuration files list.",
+                    th = "อัปเดตรายการไฟล์คอนฟิกเรียบร้อยแล้ว",
+                },
                 Icon = "rotate-cw",
                 Duration = 2,
             })
@@ -12239,14 +12404,20 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     
     -- Right Section Elements: Automation & Sharing
     rightSec:Toggle({
-        Title = "Auto-Load Profile",
-        Desc = "Automatically load the selected profile upon script boot",
+        Title = { en = "Auto-Load Profile", th = "โหลดอัตโนมัติเมื่อเปิดสคริปต์" },
+        Desc = { en = "Automatically load the selected profile upon script boot", th = "โหลดโปรไฟล์ที่เลือกอัตโนมัติเมื่อเปิดใช้งานสคริปต์" },
         Value = engine:GetAutoLoad(),
         Callback = function(enabled)
             engine:SetAutoLoad(enabled)
             window:Notify({
-                Title = "Auto-Load Config",
-                Content = if enabled then "Auto-load enabled for '" .. currentConfig .. "'." else "Auto-load disabled.",
+                Title = { en = "Auto-Load Config", th = "โหลดอัตโนมัติ" },
+                Content = if enabled then {
+                    en = "Auto-load enabled for '" .. currentConfig .. "'.",
+                    th = "เปิดการโหลดอัตโนมัติสำหรับ '" .. currentConfig .. "' แล้ว",
+                } else {
+                    en = "Auto-load disabled.",
+                    th = "ปิดการโหลดอัตโนมัติแล้ว",
+                },
                 Icon = "file-cog",
                 Duration = 2,
             })
@@ -12254,44 +12425,69 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     })
     
     rightSec:Toggle({
-        Title = "Auto-Save Profile",
-        Desc = "Save changes in real-time when controls are modified (0.5s debounce)",
+        Title = { en = "Auto-Save Profile", th = "บันทึกอัตโนมัติแบบเรียลไทม์" },
+        Desc = { en = "Save changes in real-time when controls are modified (0.5s debounce)", th = "บันทึกการตั้งค่าอัตโนมัติทันทีเมื่อมีการปรับเปลี่ยนค่า (หน่วงเวลา 0.5s)" },
         Value = engine.AutoSaveEnabled,
         Callback = function(enabled)
             engine:SetAutoSave(enabled, currentConfig, 0.5)
             window:Notify({
-                Title = "Auto-Save Config",
-                Content = if enabled then "Realtime auto-save active." else "Auto-save disabled.",
+                Title = { en = "Auto-Save Config", th = "บันทึกอัตโนมัติ" },
+                Content = if enabled then {
+                    en = "Realtime auto-save active.",
+                    th = "เปิดการบันทึกอัตโนมัติแล้ว",
+                } else {
+                    en = "Auto-save disabled.",
+                    th = "ปิดการบันทึกอัตโนมัติแล้ว",
+                },
                 Icon = "refresh-cw",
                 Duration = 2,
             })
         end,
     })
     
-    rightSec:Divider("Portability & Sharing")
+    rightSec:Divider({ en = "Portability & Sharing", th = "การส่งออกและนำเข้า" })
+    
+    local function getExecutorFunc(name: string): any
+        if engine and type((engine :: any).GetExecutorFunc) == "function" then
+            local fn = (engine :: any).GetExecutorFunc(name)
+            if fn ~= nil then return fn end
+        end
+        local genv = (type(getgenv) == "function" and getgenv()) or nil
+        if genv and genv[name] ~= nil then return genv[name] end
+        local s1, val1 = pcall(function() return getfenv()[name] end)
+        if s1 and val1 ~= nil then return val1 end
+        local s2, val2 = pcall(function()
+            local g = (rawget(getfenv(), "_G") :: any)
+            return g and g[name]
+        end)
+        if s2 and val2 ~= nil then return val2 end
+        return nil
+    end
     
     rightSec:Button({
-        Title = "Export to Clipboard",
-        Desc = "Copy raw configuration JSON to your clipboard",
+        Title = { en = "Export to Clipboard", th = "ส่งออกไปยังคลิปบอร์ด" },
+        Desc = { en = "Copy raw configuration JSON to your clipboard", th = "คัดลอกข้อความ JSON ของคอนฟิกนี้ลงคลิปบอร์ด" },
         Icon = "copy",
         Callback = function()
             local targetName = currentConfig
             local data, err = engine:ExportConfig(targetName)
             if data then
-                local env = getfenv()
-                local setclip = rawget(env, "setclipboard") or rawget(env, "toclipboard")
+                local setclip = getExecutorFunc("setclipboard") or getExecutorFunc("toclipboard")
                 if type(setclip) == "function" then
                     pcall(setclip, data)
                 end
                 window:Notify({
-                    Title = "Export Successful",
-                    Content = "Profile '" .. targetName .. "' JSON copied to clipboard!",
+                    Title = { en = "Export Successful", th = "ส่งออกสำเร็จ" },
+                    Content = {
+                        en = "Profile '" .. targetName .. "' JSON copied to clipboard!",
+                        th = "คัดลอก JSON ของโปรไฟล์ '" .. targetName .. "' ลงคลิปบอร์ดแล้ว",
+                    },
                     Icon = "check-circle",
                     Duration = 3,
                 })
             else
                 window:Notify({
-                    Title = "Export Failed",
+                    Title = { en = "Export Failed", th = "ส่งออกล้มเหลว" },
                     Content = tostring(err or "Failed to export"),
                     Icon = "alert-triangle",
                     Duration = 3,
@@ -12301,17 +12497,19 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     })
     
     rightSec:Button({
-        Title = "Import from Clipboard",
-        Desc = "Paste JSON string from clipboard and hydrate into UI",
+        Title = { en = "Import from Clipboard", th = "นำเข้าจากคลิปบอร์ด" },
+        Desc = { en = "Paste JSON string from clipboard and hydrate into UI", th = "นำข้อความ JSON จากคลิปบอร์ดมาบันทึกและปรับใช้กับ UI" },
         Icon = "upload",
         Callback = function()
-            local env = getfenv()
-            local getclip = rawget(env, "getclipboard")
+            local getclip = getExecutorFunc("getclipboard")
             local raw = if type(getclip) == "function" then getclip() else nil
             if not raw or type(raw) ~= "string" or raw == "" then
                 window:Notify({
-                    Title = "Import Failed",
-                    Content = "Clipboard is empty or inaccessible.",
+                    Title = { en = "Import Failed", th = "นำเข้าล้มเหลว" },
+                    Content = {
+                        en = "Clipboard is empty or inaccessible.",
+                        th = "คลิปบอร์ดว่างเปล่าหรือไม่สามารถเข้าถึงได้",
+                    },
                     Icon = "alert-triangle",
                     Duration = 3,
                 })
@@ -12324,14 +12522,17 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
                 engine:LoadConfig(targetName, false)
                 refreshDropdown(targetName)
                 window:Notify({
-                    Title = "Import Successful",
-                    Content = "Configuration imported and loaded successfully!",
+                    Title = { en = "Import Successful", th = "นำเข้าสำเร็จ" },
+                    Content = {
+                        en = "Configuration imported and loaded successfully!",
+                        th = "นำเข้าและโหลดการตั้งค่าเรียบร้อยแล้ว",
+                    },
                     Icon = "check-circle",
                     Duration = 3,
                 })
             else
                 window:Notify({
-                    Title = "Import Failed",
+                    Title = { en = "Import Failed", th = "นำเข้าล้มเหลว" },
                     Content = "Invalid JSON: " .. tostring(err or "corrupt"),
                     Icon = "alert-triangle",
                     Duration = 3,
@@ -12341,24 +12542,30 @@ function Window._buildConfigUI(window: any, container: any, props: any?)
     })
     
     rightSec:Button({
-        Title = "Reset to Factory Defaults",
-        Desc = "Revert all controls back to initial script values",
+        Title = { en = "Reset to Factory Defaults", th = "รีเซ็ตค่าเริ่มต้นโรงงาน" },
+        Desc = { en = "Revert all controls back to initial script values", th = "คืนค่าการตั้งค่าทั้งหมดกลับเป็นค่าเริ่มต้นดั้งเดิม" },
         Icon = "rotate-ccw",
         Callback = function()
             window:Dialog({
-                Title = "Reset to Defaults",
-                Content = "Are you sure you want to reset all controls to factory default values? Any unsaved changes will be lost.",
+                Title = { en = "Reset to Defaults", th = "ยืนยันการรีเซ็ต" },
+                Content = {
+                    en = "Are you sure you want to reset all controls to factory default values? Any unsaved changes will be lost.",
+                    th = "คุณแน่ใจหรือไม่ว่าต้องการรีเซ็ตการตั้งค่าทั้งหมดกลับเป็นค่าเริ่มต้นโรงงาน? การตั้งค่าที่ไม่ได้บันทึกจะหายไป",
+                },
                 Icon = "alert-triangle",
                 Buttons = {
-                    { Title = "Cancel", Style = "Default" },
+                    { Title = { en = "Cancel", th = "ยกเลิก" }, Style = "Default" },
                     {
-                        Title = "Reset All",
+                        Title = { en = "Reset All", th = "รีเซ็ตทั้งหมด" },
                         Style = "Danger",
                         Callback = function()
                             engine:ResetToDefaults(false)
                             window:Notify({
-                                Title = "Reset Complete",
-                                Content = "All controls reverted to factory default values.",
+                                Title = { en = "Reset Complete", th = "รีเซ็ตสำเร็จ" },
+                                Content = {
+                                    en = "All controls reverted to factory default values.",
+                                    th = "คืนค่าการตั้งค่าทั้งหมดกลับเป็นค่าเริ่มต้นโรงงานแล้ว",
+                                },
                                 Icon = "check",
                                 Duration = 3,
                             })
@@ -12372,7 +12579,7 @@ end
 
 function Window:AddConfigTab(props: any?)
     props = props or {}
-    local tabTitle = props.Title or "Configuration"
+    local tabTitle = props.Title or { en = "Configuration", th = "การตั้งค่า" }
     local tabIcon = props.Icon or "file-cog"
     
     local configTab = self:Tab({
@@ -12897,7 +13104,8 @@ function SodiumUI:CreateWindow(props: any)
     end
     
     local folderName = props.Folder or "SodiumUI"
-    local configEngine = ConfigEngine.new(folderName)
+    local perMap = if props.PerMap ~= nil then props.PerMap else (if props.PerPlace ~= nil then props.PerPlace else props.Map)
+    local configEngine = ConfigEngine.new(folderName, perMap)
     local containerManager = Container.new(props.Title or "SodiumUI")
     table.insert(activeContainers, containerManager)
     
