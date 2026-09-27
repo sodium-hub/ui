@@ -6061,12 +6061,11 @@ function TabSection.new(window: any, parent: Instance, props: TabSectionProps)
     Theme.Bind(chevron, "ImageColor3", "TextMuted")
     chevron.Parent = header
     
-    -- Tab List Container (CanvasGroup for simultaneous dimension easing and opacity cross-fade)
-    local tabList = Instance.new("CanvasGroup")
+    -- Tab List Container (Clean Frame with ClipsDescendants, 100% stable across Mobile & PC)
+    local tabList = Instance.new("Frame")
     tabList.Name = "TabList"
     tabList.Size = UDim2.new(1, 0, 0, 0)
     tabList.BackgroundTransparency = 1
-    tabList.GroupTransparency = if self.Opened then 0 else 1
     tabList.ClipsDescendants = true
     tabList.Visible = self.Opened
     
@@ -6101,7 +6100,7 @@ function TabSection.new(window: any, parent: Instance, props: TabSectionProps)
     
     table.insert(self._connections, tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         if self.Opened and not self._isAnimating then
-            tabList.Size = UDim2.new(1, 0, 0, tabLayout.AbsoluteContentSize.Y)
+            tabList.Size = UDim2.new(1, 0, 0, self:GetTargetHeight())
             if self.Window and self.Window.UpdateIndicator then
                 self.Window:UpdateIndicator(true)
             end
@@ -6116,7 +6115,6 @@ function TabSection.new(window: any, parent: Instance, props: TabSectionProps)
     self.TitleLabel = title
     self._isAnimating = false
     self._sizeTween = nil
-    self._alphaTween = nil
     self._chevronTween = nil
     self._renderConn = nil
     
@@ -6124,12 +6122,36 @@ function TabSection.new(window: any, parent: Instance, props: TabSectionProps)
     if self.Opened then
         task.defer(function()
             if self.Opened and not self._isAnimating and tabList and tabLayout then
-                tabList.Size = UDim2.new(1, 0, 0, tabLayout.AbsoluteContentSize.Y)
+                tabList.Size = UDim2.new(1, 0, 0, self:GetTargetHeight())
             end
         end)
     end
     
     return self
+end
+
+function TabSection:GetTargetHeight(): number
+    local scale = 1
+    if self.Window and self.Window.ContainerManager and self.Window.ContainerManager.UIScale then
+        scale = math.max(0.001, self.Window.ContainerManager.UIScale.Scale)
+    end
+    
+    local contentH = 0
+    if self.TabLayout and self.TabLayout.AbsoluteContentSize.Y > 0 then
+        contentH = math.ceil(self.TabLayout.AbsoluteContentSize.Y / scale)
+    end
+    
+    local visibleCount = 0
+    if self.TabList then
+        for _, child in ipairs(self.TabList:GetChildren()) do
+            if child:IsA("GuiObject") and child.Name:sub(1, 7) == "TabBtn_" then
+                visibleCount = visibleCount + 1
+            end
+        end
+    end
+    local expectedH = if visibleCount > 0 then (visibleCount * 36 + (visibleCount - 1) * 4) else 0
+    
+    return math.max(contentH, expectedH)
 end
 
 function TabSection:Destroy()
@@ -6140,10 +6162,6 @@ function TabSection:Destroy()
     if self._sizeTween then
         self._sizeTween:Cancel()
         self._sizeTween = nil
-    end
-    if self._alphaTween then
-        self._alphaTween:Cancel()
-        self._alphaTween = nil
     end
     if self._chevronTween then
         self._chevronTween:Cancel()
@@ -6200,7 +6218,7 @@ function TabSection:Toggle(opened: boolean?)
     end)
     
     if self.Opened then
-        -- 1. EXPAND: Dynamic Dimension Easing + Opacity Cross-Fade (0 -> 1)
+        -- 1. EXPAND: Dynamic Dimension Easing
         self.TabList.Visible = true
         self.TabList.ClipsDescendants = true
         
@@ -6214,29 +6232,26 @@ function TabSection:Toggle(opened: boolean?)
         
         self._chevronTween = Tweener.Tween(self.Chevron, Tweener.Info.Smooth, { Rotation = 0 })
         
-        local targetHeight = math.max(1, self.TabLayout.AbsoluteContentSize.Y)
+        local targetHeight = self:GetTargetHeight()
         
-        self._alphaTween = Tweener.Tween(self.TabList, Tweener.Info.Smooth, { GroupTransparency = 0 })
         self._sizeTween = Tweener.Tween(self.TabList, Tweener.Info.Smooth, {
             Size = UDim2.new(1, 0, 0, targetHeight),
         }, function()
             self._isAnimating = false
             self._sizeTween = nil
-            self._alphaTween = nil
             if self._renderConn then
                 self._renderConn:Disconnect()
                 self._renderConn = nil
             end
             if self.Opened then
-                self.TabList.Size = UDim2.new(1, 0, 0, self.TabLayout.AbsoluteContentSize.Y)
-                self.TabList.GroupTransparency = 0
+                self.TabList.Size = UDim2.new(1, 0, 0, self:GetTargetHeight())
                 if self.Window and self.Window.UpdateIndicator then
                     self.Window:UpdateIndicator(true)
                 end
             end
         end)
     else
-        -- 2. COLLAPSE: Immediate Hitbox Deactivation, Opacity Fade (1 -> 0) & Container Bounds to 0
+        -- 2. COLLAPSE: Immediate Hitbox Deactivation & Container Bounds to 0
         for _, tab in ipairs(self.Tabs) do
             if tab.SidebarButton then
                 tab.SidebarButton.Active = false
@@ -6244,23 +6259,19 @@ function TabSection:Toggle(opened: boolean?)
         end
         
         self._chevronTween = Tweener.Tween(self.Chevron, Tweener.Info.ExitSmooth, { Rotation = -90 })
-        
         self.TabList.ClipsDescendants = true
         
-        self._alphaTween = Tweener.Tween(self.TabList, Tweener.Info.ExitSmooth, { GroupTransparency = 1 })
         self._sizeTween = Tweener.Tween(self.TabList, Tweener.Info.ExitSmooth, {
             Size = UDim2.new(1, 0, 0, 0),
         }, function()
             self._isAnimating = false
             self._sizeTween = nil
-            self._alphaTween = nil
             if self._renderConn then
                 self._renderConn:Disconnect()
                 self._renderConn = nil
             end
             if not self.Opened then
                 self.TabList.Visible = false
-                self.TabList.GroupTransparency = 1
                 for _, tab in ipairs(self.Tabs) do
                     if tab.SidebarButton then
                         tab.SidebarButton.Visible = false
@@ -6279,7 +6290,12 @@ end
 function TabSection:Tab(props: any)
     assert(self.Window, "[SodiumUI.TabSection] Window reference is nil")
     local tab = self.Window:Tab(props, self)
-    table.insert(self.Tabs, tab)
+    if not table.find(self.Tabs, tab) then
+        table.insert(self.Tabs, tab)
+    end
+    if self.Opened and not self._isAnimating and self.TabList then
+        self.TabList.Size = UDim2.new(1, 0, 0, self:GetTargetHeight())
+    end
     return tab
 end
 
@@ -9215,6 +9231,7 @@ function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance,
     titleLabel.TextColor3 = Theme.GetToken("TextMuted")
     titleLabel.TextSize = 13
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = sidebarBtn
     
     sidebarBtn.Parent = sidebarList
@@ -10305,18 +10322,31 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         self.SearchBox = searchBox
     end
     
-    -- User profile card at bottom (if enabled)
-    local userCardHeight = 0
+    -- Sidebar Header Height Calculation
+    local headerHeight = if not props.HideSearchBar then 52 else 12
+
+    -- Sidebar Footer Height Calculation
+    local footerHeight = 12
+    local sidebarFooter: Frame? = nil
     if props.User and props.User.Enabled then
-        userCardHeight = 56
+        footerHeight = 104
+        sidebarFooter = Instance.new("Frame")
+        sidebarFooter.Name = "SidebarFooter"
+        sidebarFooter.Size = UDim2.new(1, 0, 0, footerHeight)
+        sidebarFooter.Position = UDim2.new(0, 0, 1, 0)
+        sidebarFooter.AnchorPoint = Vector2.new(0, 1)
+        sidebarFooter.BackgroundTransparency = 1
+        sidebarFooter.ZIndex = 5
+        sidebarFooter.Parent = sidebar
         
         -- 3 Square Action Buttons directly above Profile Box (Hide Name, WhiteMode Toggle, Discord Copy)
         local sidebarTools = Instance.new("Frame")
         sidebarTools.Name = "SidebarTools"
         sidebarTools.Size = UDim2.new(1, -24, 0, 32)
-        sidebarTools.Position = UDim2.new(0, 12, 1, -104)
+        sidebarTools.Position = UDim2.new(0, 12, 0, 8)
         sidebarTools.BackgroundTransparency = 1
-        sidebarTools.Parent = sidebar
+        sidebarTools.ZIndex = 5
+        sidebarTools.Parent = sidebarFooter
         
         local toolsLayout = Instance.new("UIListLayout")
         toolsLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -10344,6 +10374,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         hideNameBtn.BackgroundColor3 = Theme.GetToken("Card")
         hideNameBtn.AutoButtonColor = false
         hideNameBtn.Text = ""
+        hideNameBtn.ZIndex = 5
         hideNameBtn.Parent = sidebarTools
         Theme.Bind(hideNameBtn, "BackgroundColor3", "Card")
         
@@ -10364,6 +10395,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         hideNameIcon.AnchorPoint = Vector2.new(0.5, 0.5)
         hideNameIcon.BackgroundTransparency = 1
         hideNameIcon.ImageColor3 = if isNameHidden then Theme.GetToken("Accent") else Theme.GetToken("TextMuted")
+        hideNameIcon.ZIndex = 6
         applyIconToLabel(hideNameIcon, currentProfileIcon)
         hideNameIcon.Parent = hideNameBtn
         
@@ -10374,6 +10406,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         themeToggleBtn.BackgroundColor3 = Theme.GetToken("Card")
         themeToggleBtn.AutoButtonColor = false
         themeToggleBtn.Text = ""
+        themeToggleBtn.ZIndex = 5
         themeToggleBtn.Parent = sidebarTools
         Theme.Bind(themeToggleBtn, "BackgroundColor3", "Card")
         
@@ -10394,6 +10427,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         themeToggleIcon.AnchorPoint = Vector2.new(0.5, 0.5)
         themeToggleIcon.BackgroundTransparency = 1
         themeToggleIcon.ImageColor3 = if isWhiteMode then Theme.GetToken("Accent") else Theme.GetToken("TextMuted")
+        themeToggleIcon.ZIndex = 6
         applyIconToLabel(themeToggleIcon, if isWhiteMode then "moon" else currentThemeIcon)
         themeToggleIcon.Parent = themeToggleBtn
 
@@ -10404,6 +10438,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         discordBtn.BackgroundColor3 = Theme.GetToken("Card")
         discordBtn.AutoButtonColor = false
         discordBtn.Text = ""
+        discordBtn.ZIndex = 5
         discordBtn.Parent = sidebarTools
         Theme.Bind(discordBtn, "BackgroundColor3", "Card")
 
@@ -10424,6 +10459,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         discordIcon.AnchorPoint = Vector2.new(0.5, 0.5)
         discordIcon.BackgroundTransparency = 1
         discordIcon.ImageColor3 = Theme.GetToken("TextMuted")
+        discordIcon.ZIndex = 6
         applyIconToLabel(discordIcon, currentDiscordIcon)
         discordIcon.Parent = discordBtn
         
@@ -10434,10 +10470,11 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         local userCard = Instance.new("TextButton")
         userCard.Name = "UserCard"
         userCard.Size = UDim2.new(1, -24, 0, 48)
-        userCard.Position = UDim2.new(0, 12, 1, -56)
+        userCard.Position = UDim2.new(0, 12, 0, 48)
         userCard.BackgroundColor3 = Theme.GetToken("Card")
         userCard.AutoButtonColor = false
         userCard.Text = ""
+        userCard.ZIndex = 5
         Theme.Bind(userCard, "BackgroundColor3", "Card")
         
         local userCorner = Instance.new("UICorner")
@@ -10527,6 +10564,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         avatarImg.Position = UDim2.new(0, 8, 0.5, 0)
         avatarImg.AnchorPoint = Vector2.new(0, 0.5)
         avatarImg.BackgroundColor3 = Theme.GetToken("SurfaceHover")
+        avatarImg.ZIndex = 6
         Theme.Bind(avatarImg, "BackgroundColor3", "SurfaceHover")
         
         local avatarCorner = Instance.new("UICorner")
@@ -10563,6 +10601,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         nameLabel.TextSize = 12
         nameLabel.TextXAlignment = Enum.TextXAlignment.Left
         nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLabel.ZIndex = 6
         nameLabel.Parent = userCard
         Theme.Bind(nameLabel, "TextColor3", "TextPrimary")
         
@@ -10577,6 +10616,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         userLabel.TextSize = 10
         userLabel.TextXAlignment = Enum.TextXAlignment.Left
         userLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        userLabel.ZIndex = 6
         userLabel.Parent = userCard
         Theme.Bind(userLabel, "TextColor3", "Placeholder")
 
@@ -10666,27 +10706,38 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         if props.User.Callback then
             userCard.Activated:Connect(props.User.Callback)
         end
-        
-        userCard.Parent = sidebar
     end
     
-    -- Scrollable Sidebar Tab List
-    local bottomTotalHeight = if (props.User and props.User.Enabled) then (userCardHeight + 40 + 20) else 24
+    -- Scrollable Sidebar Tab List (Clean Tier 2 Dock Viewport with Smooth Elastic Touch Scrolling)
     local tabList = Instance.new("ScrollingFrame")
     tabList.Name = "TabList"
-    tabList.Size = UDim2.new(1, -24, 1, -searchOffset - bottomTotalHeight)
-    tabList.Position = UDim2.new(0, 12, 0, searchOffset + 12)
+    tabList.Size = UDim2.new(1, -20, 1, -(headerHeight + footerHeight))
+    tabList.Position = UDim2.new(0, 10, 0, headerHeight)
     tabList.BackgroundTransparency = 1
     tabList.BorderSizePixel = 0
-    tabList.ScrollBarThickness = 2
+    tabList.ClipsDescendants = true
+    tabList.ScrollingDirection = Enum.ScrollingDirection.Y
+    tabList.ElasticBehavior = Enum.ElasticBehavior.Always
+    tabList.ScrollBarThickness = 3
     tabList.ScrollBarImageColor3 = Theme.GetToken("BorderStrong")
+    tabList.ScrollBarImageTransparency = 0.4
+    tabList.VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right
+    tabList.VerticalScrollBarInset = Enum.ScrollBarInset.None
     tabList.CanvasSize = UDim2.new(0, 0, 0, 0)
-    tabList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Theme.Bind(tabList, "ScrollBarImageColor3", "BorderStrong")
     
     local tabLayout = Instance.new("UIListLayout")
     tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
     tabLayout.Padding = UDim.new(0, 4)
     tabLayout.Parent = tabList
+    
+    local function updateCanvasSize()
+        local scale = math.max(0.001, self.ContainerManager.UIScale.Scale)
+        local contentH = math.ceil(tabLayout.AbsoluteContentSize.Y / scale)
+        tabList.CanvasSize = UDim2.new(0, 0, 0, contentH + 16)
+    end
+    tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvasSize)
+    task.defer(updateCanvasSize)
     
     tabList.ZIndex = 2
     tabList.Parent = sidebar
@@ -11575,6 +11626,7 @@ function Window:SelectTab(targetTab: any)
     end
     
     targetTab:Select(true)
+    self:ScrollToTab(targetTab)
     self:UpdateIndicator(false)
     
     -- Absolute Coordinate Lock: Keep indicator locked onto targetTab whenever layout shifts (without interrupting active tween)
@@ -11711,6 +11763,14 @@ function Window:UpdateIndicator(immediate: boolean?)
     local width = btnSize.X / scale
     local height = btnSize.Y / scale
     
+    local overlayH = self.TabIndicatorOverlay.AbsoluteSize.Y / scale
+    if relY + height < 0 or relY > overlayH then
+        self.TabIndicator.Visible = false
+        return
+    else
+        self.TabIndicator.Visible = true
+    end
+    
     local targetPos = UDim2.fromOffset(relX, relY)
     local targetSize = UDim2.fromOffset(width, height)
     
@@ -11755,13 +11815,100 @@ function Window:UpdateIndicator(immediate: boolean?)
                     local oPos = self.TabIndicatorOverlay.AbsolutePosition
                     local bPos = b.AbsolutePosition
                     local bSize = b.AbsoluteSize
-                    self.TabIndicator.Position = UDim2.fromOffset((bPos.X - oPos.X) / s, (bPos.Y - oPos.Y) / s)
-                    self.TabIndicator.Size = UDim2.fromOffset(bSize.X / s, bSize.Y / s)
+                    local curRelY = (bPos.Y - oPos.Y) / s
+                    local curH = bSize.Y / s
+                    local oH = self.TabIndicatorOverlay.AbsoluteSize.Y / s
+                    if curRelY + curH < 0 or curRelY > oH then
+                        self.TabIndicator.Visible = false
+                    else
+                        self.TabIndicator.Visible = true
+                        self.TabIndicator.Position = UDim2.fromOffset((bPos.X - oPos.X) / s, curRelY)
+                        self.TabIndicator.Size = UDim2.fromOffset(bSize.X / s, curH)
+                    end
                 elseif targetTab.ParentSection and not targetTab.ParentSection.Opened then
                     self.TabIndicator.Visible = false
                 end
             end
         end)
+    end
+end
+
+-- Auto-Scroll Active Tab into View (Smoothly scrolls tabList so targetTab is fully visible)
+function Window:ScrollToTab(targetTab: any, immediate: boolean?)
+    if not targetTab or not self.SidebarTabList then return end
+    local btn = targetTab.SidebarButton
+    if not btn or not btn.Parent or not btn.Visible then return end
+    
+    -- Ensure parent category accordion is opened
+    if targetTab.ParentSection and not targetTab.ParentSection.Opened then
+        targetTab.ParentSection:Toggle(true)
+    end
+    
+    local tabList = self.SidebarTabList
+    local scale = math.max(0.001, self.ContainerManager.UIScale.Scale)
+    
+    if btn.AbsoluteSize.Y <= 0 or tabList.AbsoluteWindowSize.Y <= 0 then
+        task.defer(function()
+            if self.CurrentTab == targetTab then
+                self:ScrollToTab(targetTab, immediate)
+            end
+        end)
+        return
+    end
+    
+    local tabListPos = tabList.AbsolutePosition
+    local tabListH = tabList.AbsoluteWindowSize.Y / scale
+    local btnPos = btn.AbsolutePosition
+    local btnH = btn.AbsoluteSize.Y / scale
+    
+    local currentCanvasY = tabList.CanvasPosition.Y
+    local btnTopRel = (btnPos.Y - tabListPos.Y) / scale
+    local btnBottomRel = btnTopRel + btnH
+    
+    local targetCanvasY = currentCanvasY
+    if btnTopRel < 8 then
+        targetCanvasY = math.max(0, currentCanvasY + btnTopRel - 8)
+    elseif btnBottomRel > tabListH - 8 then
+        targetCanvasY = currentCanvasY + (btnBottomRel - tabListH + 8)
+    else
+        return -- already within comfortable view
+    end
+    
+    local maxCanvasY = math.max(0, (tabList.AbsoluteCanvasSize.Y - tabList.AbsoluteWindowSize.Y) / scale)
+    targetCanvasY = math.clamp(targetCanvasY, 0, maxCanvasY)
+    
+    if immediate then
+        tabList.CanvasPosition = Vector2.new(0, targetCanvasY)
+        self:UpdateIndicator(true)
+    else
+        if self._scrollTweenVal then
+            self._scrollTweenVal:Destroy()
+            self._scrollTweenVal = nil
+        end
+        local startY = tabList.CanvasPosition.Y
+        if math.abs(targetCanvasY - startY) > 2 then
+            local valObj = Instance.new("NumberValue")
+            valObj.Value = startY
+            self._scrollTweenVal = valObj
+            local scrollConn: any = nil
+            scrollConn = valObj.Changed:Connect(function(newY)
+                if tabList and tabList.Parent then
+                    tabList.CanvasPosition = Vector2.new(0, newY)
+                    self:UpdateIndicator(true)
+                end
+            end)
+            Tweener.Tween(valObj, Tweener.Info.Normal, { Value = targetCanvasY }, function()
+                if scrollConn then
+                    scrollConn:Disconnect()
+                    scrollConn = nil
+                end
+                valObj:Destroy()
+                if self._scrollTweenVal == valObj then
+                    self._scrollTweenVal = nil
+                end
+                self:UpdateIndicator(true)
+            end)
+        end
     end
 end
 
@@ -11860,6 +12007,10 @@ function Window:Destroy()
     if self._minDragConn then
         self._minDragConn:Disconnect()
         self._minDragConn = nil
+    end
+    if self._scrollTweenVal then
+        self._scrollTweenVal:Destroy()
+        self._scrollTweenVal = nil
     end
     if self._toggleKeyConn then
         self._toggleKeyConn:Disconnect()
