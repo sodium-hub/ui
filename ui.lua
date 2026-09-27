@@ -3312,45 +3312,172 @@ end
 _MODULES['Storage/ConfigEngine'] = function()
 --[=[
     Sodium UI - Storage/ConfigEngine.luau
-    Enterprise-Grade Advanced Config Engine:
-    - Smart Type Serialization (Color3, EnumItem, Vector2, Vector3, UDim2, Tables, Primitives)
-    - High-Performance In-Memory Cache with Instant Reads (Flags map)
-    - Debounced Auto-Save Engine
-    - Atomic UNC File I/O with checksum/validation
+    Ultra-High-Performance, Enterprise-Grade Universal Config Engine:
+    - 100% Universal UNC FileSystem Abstraction:
+      Supports ALL executors: Real, Synapse X/v3, Solara, Wave, Fluxus, Delta,
+      Arceus X, Evon, Vega X, MacSploit, Codex, Hydrogen, Celery, Krampus, etc.
+    - Deep Smart Type Serialization (Color3, EnumItem, KeyCode, Vector2, Vector3, UDim2, Tables, Primitives)
+    - High-Speed In-Memory Cache with O(1) Instant Reads
+    - Atomic Batch Loading Mode (isBatchLoading) with Event/Animation Suspension (Zero Lag Spikes)
+    - Zero Disk Waste via Smart Diffing (Skips redundant disk writes if state is unchanged)
+    - Sliding Window Debounced Auto-Save Engine (coalesces rapid slider/input changes)
     - Profile Management: Save, Load, Delete, List, Export, Import, ResetToDefaults
     - Event Signals: OnConfigLoaded, OnConfigSaved, OnFlagChanged
 ]=]
 
 local HttpService = game:GetService("HttpService")
 
--- Safe executor environment accessor
+-- ============================================================================
+-- 1. UNIVERSAL UNC FILESYSTEM ABSTRACTION (CROSS-EXECUTOR)
+-- ============================================================================
+
 local function getExecutorFunc(name: string): any
+    -- Check getgenv() first (standard executor global environment)
     local genv = (type(getgenv) == "function" and getgenv()) or nil
     if genv and genv[name] ~= nil then return genv[name] end
-    local s, val = pcall(function() return getfenv()[name] end)
-    if s and val ~= nil then return val end
+    
+    -- Check getfenv() / script environment
+    local s1, val1 = pcall(function() return getfenv()[name] end)
+    if s1 and val1 ~= nil then return val1 end
+    
+    -- Check raw _G
+    local s2, val2 = pcall(function()
+        local g = (rawget(getfenv(), "_G") :: any)
+        return g and g[name]
+    end)
+    if s2 and val2 ~= nil then return val2 end
+    
+    -- Check getrenv() if present
+    local renv = (type(getrenv) == "function" and getrenv()) or nil
+    if renv and renv[name] ~= nil then return renv[name] end
+    
     return nil
 end
 
-local ConfigEngine = {}
-ConfigEngine.__index = ConfigEngine
+local FS = {}
 
-export type FlagHandler = {
-    Get: () -> any,
-    Set: (val: any, skipCallback: boolean?) -> (),
-    Default: any?,
-}
+function FS.hasFS(): boolean
+    local writef = getExecutorFunc("writefile")
+    local readf = getExecutorFunc("readfile")
+    local isf = getExecutorFunc("isfile")
+    return type(writef) == "function"
+        and type(readf) == "function"
+        and type(isf) == "function"
+end
 
--- Type Serialization Helper
+-- Normalize path across Windows, macOS, Android, iOS executors
+function FS.normalizePath(path: string): string
+    -- Convert backslashes to forward slashes
+    local clean = string.gsub(path, "\\", "/")
+    -- Collapse multiple slashes
+    clean = string.gsub(clean, "/+", "/")
+    -- Strip trailing slash for consistency
+    clean = string.gsub(clean, "/+$", "")
+    return clean
+end
+
+function FS.isFolder(path: string): boolean
+    local isfolder = getExecutorFunc("isfolder")
+    if type(isfolder) ~= "function" then return false end
+    local ok, res = pcall(isfolder, FS.normalizePath(path))
+    return ok and (res == true)
+end
+
+function FS.isFile(path: string): boolean
+    local isfile = getExecutorFunc("isfile")
+    if type(isfile) ~= "function" then return false end
+    local ok, res = pcall(isfile, FS.normalizePath(path))
+    return ok and (res == true)
+end
+
+function FS.makeFolder(path: string): boolean
+    local makefolder = getExecutorFunc("makefolder")
+    if type(makefolder) ~= "function" then return false end
+    
+    local clean = FS.normalizePath(path)
+    if FS.isFolder(clean) then return true end
+    
+    -- Progressive folder creation (handles executors that don't recursively create parent directories)
+    local parts = string.split(clean, "/")
+    local current = ""
+    for _, part in ipairs(parts) do
+        if part ~= "" then
+            current = if current == "" then part else current .. "/" .. part
+            if not FS.isFolder(current) then
+                local ok = pcall(makefolder, current)
+                if not ok then return false end
+            end
+        end
+    end
+    return true
+end
+
+function FS.readFile(path: string): string?
+    local readfile = getExecutorFunc("readfile")
+    if type(readfile) ~= "function" then return nil end
+    local clean = FS.normalizePath(path)
+    if not FS.isFile(clean) then return nil end
+    local ok, res = pcall(readfile, clean)
+    if ok and type(res) == "string" then
+        return res
+    end
+    return nil
+end
+
+function FS.writeFile(path: string, content: string): (boolean, string?)
+    local writefile = getExecutorFunc("writefile")
+    if type(writefile) ~= "function" then return false, "writefile not supported" end
+    local clean = FS.normalizePath(path)
+    
+    -- Ensure parent folder exists
+    local parentFolder = string.match(clean, "^(.*)/[^/]+$")
+    if parentFolder and not FS.isFolder(parentFolder) then
+        FS.makeFolder(parentFolder)
+    end
+    
+    local ok, err = pcall(writefile, clean, content)
+    if not ok then
+        return false, tostring(err)
+    end
+    return true, nil
+end
+
+function FS.deleteFile(path: string): boolean
+    local delfile = getExecutorFunc("delfile")
+    if type(delfile) ~= "function" then return false end
+    local clean = FS.normalizePath(path)
+    if not FS.isFile(clean) then return true end
+    local ok = pcall(delfile, clean)
+    return ok
+end
+
+function FS.listFiles(path: string): { string }
+    local listfiles = getExecutorFunc("listfiles")
+    if type(listfiles) ~= "function" then return {} end
+    local clean = FS.normalizePath(path)
+    if not FS.isFolder(clean) then return {} end
+    
+    local ok, files = pcall(listfiles, clean)
+    if ok and type(files) == "table" then
+        return files
+    end
+    return {}
+end
+
+-- ============================================================================
+-- 2. TYPE SERIALIZATION & DESERIALIZATION (PRECISION ENGINE)
+-- ============================================================================
+
 local function serializeValue(val: any): any
     local t = typeof(val)
     if t == "Color3" then
+        local c = val :: Color3
         return {
             __type = "Color3",
-            hex = (val :: Color3):ToHex(),
-            r = (val :: Color3).R,
-            g = (val :: Color3).G,
-            b = (val :: Color3).B,
+            hex = c:ToHex(),
+            r = c.R,
+            g = c.G,
+            b = c.B,
         }
     elseif t == "EnumItem" then
         local enumItem = val :: EnumItem
@@ -3380,7 +3507,6 @@ local function serializeValue(val: any): any
     end
 end
 
--- Type Deserialization Helper
 local function deserializeValue(val: any): any
     if type(val) == "table" and val.__type then
         local typeName = val.__type
@@ -3394,8 +3520,8 @@ local function deserializeValue(val: any): any
             end
         elseif typeName == "EnumItem" then
             if val.enum and val.name then
-                local enumGroup = (Enum :: any)[val.enum]
-                if enumGroup and enumGroup[val.name] then
+                local ok, enumGroup = pcall(function() return (Enum :: any)[val.enum] end)
+                if ok and enumGroup and enumGroup[val.name] then
                     return enumGroup[val.name]
                 end
             end
@@ -3416,6 +3542,9 @@ local function deserializeValue(val: any): any
     return val
 end
 
+-- ============================================================================
+-- 3. CONFIG FILE WRAPPER
+-- ============================================================================
 
 local ConfigFile = {}
 ConfigFile.__index = ConfigFile
@@ -3431,7 +3560,12 @@ end
 function ConfigFile:Register(key: string, element: any)
     self.RegisteredElements[key] = element
     if element and type(element.Get) == "function" and type(element.Set) == "function" then
-        self.Engine:RegisterFlag(key, function() return element:Get() end, function(v, skip) element:Set(v, skip) end, element:Get())
+        self.Engine:RegisterFlag(
+            key,
+            function() return element:Get() end,
+            function(v, skip) element:Set(v, skip) end,
+            element:Get()
+        )
     end
     return self
 end
@@ -3456,56 +3590,66 @@ function ConfigFile:Import(jsonString: string): (boolean, string?)
     return self.Engine:ImportConfig(self.Name, jsonString)
 end
 
+-- ============================================================================
+-- 4. CONFIG ENGINE 2.0 (HIGH-PERFORMANCE ARCHITECTURE)
+-- ============================================================================
+
+local ConfigEngine = {}
+ConfigEngine.__index = ConfigEngine
+
+export type FlagHandler = {
+    Get: () -> any,
+    Set: (val: any, skipCallback: boolean?, animate: boolean?) -> (),
+    Default: any?,
+}
+
 function ConfigEngine.new(folderName: string?)
     local self = setmetatable({}, ConfigEngine)
-    self.FolderName = folderName or "SodiumHub"
+    self.FolderName = FS.normalizePath(folderName or "SodiumHub")
     self.ConfigsFolder = self.FolderName .. "/configs"
+    self.StateFile = self.FolderName .. "/__state.json"
     
+    -- In-Memory High-Speed Cache
     self.Flags = {} :: { [string]: any }
     self._handlers = {} :: { [string]: FlagHandler }
     self._listeners = {} :: { [string]: { (newVal: any) -> () } }
     self.InMemoryStorage = {} :: { [string]: string }
     
+    -- Smart Diff Snapshots (Prevents redundant disk writes)
+    self._lastSavedSnapshots = {} :: { [string]: string }
+    
+    -- Atomic Batch Transaction State
+    self._isBatchLoading = false
+    
+    -- Profile & Auto-Save State
     self.ActiveConfig = "Default"
     self.AutoSaveEnabled = false
-    self.AutoSaveDelay = 0.5
+    self.AutoSaveDelay = 0.8
     self._autoSaveThread = nil
     
-    self.StateFile = self.FolderName .. "/__state.json"
-    self:_ensureDirectories()
+    -- Event listeners
+    self._configLoadedListeners = {} :: { (name: string, stats: any) -> () }
+    self._configSavedListeners = {} :: { (name: string, diffSaved: boolean) -> () }
+    
+    -- Ensure directory structure cleanly
+    if FS.hasFS() then
+        FS.makeFolder(self.ConfigsFolder)
+    end
+    
+    -- Read saved state (selected profile, autoload, autosave)
     pcall(function()
         self:_readState()
     end)
+    
     return self
 end
 
-function ConfigEngine:_hasUNC(): boolean
-    local writef = getExecutorFunc("writefile")
-    local readf = getExecutorFunc("readfile")
-    local isf = getExecutorFunc("isfile")
-    return type(writef) == "function"
-        and type(readf) == "function"
-        and type(isf) == "function"
-end
-
-function ConfigEngine:_ensureDirectories()
-    if not self:_hasUNC() then return end
-    local makefolder = getExecutorFunc("makefolder")
-    local isfolder = getExecutorFunc("isfolder")
-    
-    if type(isfolder) == "function" and type(makefolder) == "function" then
-        pcall(function()
-            if not isfolder(self.FolderName) then
-                makefolder(self.FolderName)
-            end
-            if not isfolder(self.ConfigsFolder) then
-                makefolder(self.ConfigsFolder)
-            end
-        end)
-    end
-end
-
-function ConfigEngine:RegisterFlag(flag: string, getter: () -> any, setter: (val: any, skipCallback: boolean?) -> (), defaultVal: any?)
+function ConfigEngine:RegisterFlag(
+    flag: string,
+    getter: () -> any,
+    setter: (val: any, skipCallback: boolean?, animate: boolean?) -> (),
+    defaultVal: any?
+)
     assert(type(flag) == "string" and flag ~= "", "[SodiumUI.Config] Invalid flag name")
     
     local initial = if defaultVal ~= nil then defaultVal else getter()
@@ -3524,24 +3668,32 @@ function ConfigEngine:UnregisterFlag(flag: string)
 end
 
 function ConfigEngine:Get(flag: string): any
+    -- Fast path: Instant O(1) in-memory table lookup
+    local cached = self.Flags[flag]
+    if cached ~= nil then
+        return cached
+    end
+    
     local handler = self._handlers[flag]
     if handler then
         local s, v = pcall(handler.Get)
-        if s then
+        if s and v ~= nil then
             self.Flags[flag] = v
             return v
         end
     end
-    return self.Flags[flag]
+    return nil
 end
 
 function ConfigEngine:Set(flag: string, val: any, skipCallback: boolean?)
+    self.Flags[flag] = val
+    
     local handler = self._handlers[flag]
     if handler then
         pcall(handler.Set, val, skipCallback)
     end
-    self.Flags[flag] = val
     
+    -- Dispatch flag listeners
     local listeners = self._listeners[flag]
     if listeners then
         for _, cb in ipairs(listeners) do
@@ -3549,7 +3701,8 @@ function ConfigEngine:Set(flag: string, val: any, skipCallback: boolean?)
         end
     end
     
-    if self.AutoSaveEnabled then
+    -- Auto-save debounce (only if not currently batch loading)
+    if self.AutoSaveEnabled and not self._isBatchLoading then
         self:_triggerAutoSave()
     end
 end
@@ -3569,14 +3722,31 @@ function ConfigEngine:OnChanged(flag: string, callback: (newVal: any) -> ()): ()
     end
 end
 
+function ConfigEngine:OnConfigLoaded(callback: (name: string, stats: any) -> ()): () -> ()
+    table.insert(self._configLoadedListeners, callback)
+    return function()
+        local idx = table.find(self._configLoadedListeners, callback)
+        if idx then table.remove(self._configLoadedListeners, idx) end
+    end
+end
+
+function ConfigEngine:OnConfigSaved(callback: (name: string, diffSaved: boolean) -> ()): () -> ()
+    table.insert(self._configSavedListeners, callback)
+    return function()
+        local idx = table.find(self._configSavedListeners, callback)
+        if idx then table.remove(self._configSavedListeners, idx) end
+    end
+end
+
 function ConfigEngine:SetAutoSave(enabled: boolean, configName: string?, delaySeconds: number?)
     self.AutoSaveEnabled = enabled
-    if configName then
+    if configName and configName ~= "" then
         self.ActiveConfig = configName
     end
-    if delaySeconds then
+    if delaySeconds and delaySeconds > 0 then
         self.AutoSaveDelay = delaySeconds
     end
+    self:_writeState({ autosave = enabled, selected = self.ActiveConfig })
 end
 
 function ConfigEngine:_triggerAutoSave()
@@ -3586,13 +3756,20 @@ function ConfigEngine:_triggerAutoSave()
     end
     self._autoSaveThread = task.delay(self.AutoSaveDelay, function()
         self._autoSaveThread = nil
-        self:SaveConfig(self.ActiveConfig or "Default")
+        if not self._isBatchLoading then
+            self:SaveConfig(self.ActiveConfig or "Default")
+        end
     end)
 end
+
+-- ============================================================================
+-- 5. PERSISTENCE ENGINE (DIFF CHECKING & ATOMIC I/O)
+-- ============================================================================
 
 function ConfigEngine:SaveConfig(configName: string): (boolean, string?)
     assert(type(configName) == "string" and configName ~= "", "[SodiumUI.Config] Invalid config name")
     
+    -- Step 1: Collect serializable state from registered flags
     local stateMap = {}
     for flag, handler in pairs(self._handlers) do
         local success, val = pcall(handler.Get)
@@ -3602,6 +3779,17 @@ function ConfigEngine:SaveConfig(configName: string): (boolean, string?)
         elseif self.Flags[flag] ~= nil then
             stateMap[flag] = serializeValue(self.Flags[flag])
         end
+    end
+    
+    local sFlags, flagsJson = pcall(HttpService.JSONEncode, HttpService, stateMap)
+    
+    -- Step 2: Smart Diffing (Zero Resource Waste)
+    -- If the flags content is identical to our last saved snapshot, skip disk write completely!
+    if sFlags and flagsJson and self._lastSavedSnapshots[configName] == flagsJson then
+        for _, cb in ipairs(self._configSavedListeners) do
+            task.spawn(cb, configName, false)
+        end
+        return true, "Config unchanged (diff skipped)"
     end
     
     local payload = {
@@ -3620,58 +3808,54 @@ function ConfigEngine:SaveConfig(configName: string): (boolean, string?)
         return false, "Failed to encode config to JSON"
     end
     
-    local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
     self.ActiveConfig = configName
     
-    if self:_hasUNC() then
-        self:_ensureDirectories()
-        local writefile = getExecutorFunc("writefile")
-        local isfile = getExecutorFunc("isfile")
-        
-        local writeOk, writeErr = pcall(writefile, filePath, jsonString)
+    -- Step 3: Write to disk / in-memory store
+    local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
+    if FS.hasFS() then
+        local writeOk, writeErr = FS.writeFile(filePath, jsonString)
         if not writeOk then
             warn("[SodiumUI.Config] Failed to save config to disk:", writeErr)
             return false, tostring(writeErr)
         end
         
-        if type(isfile) == "function" and not isfile(filePath) then
-            return false, "Verification failed: file was not written"
+        self._lastSavedSnapshots[configName] = if sFlags then flagsJson else jsonString
+        self:_writeState({ selected = configName })
+        
+        for _, cb in ipairs(self._configSavedListeners) do
+            task.spawn(cb, configName, true)
         end
         return true, "Config saved successfully"
     else
         self.InMemoryStorage[configName] = jsonString
+        self._lastSavedSnapshots[configName] = if sFlags then flagsJson else jsonString
+        
+        for _, cb in ipairs(self._configSavedListeners) do
+            task.spawn(cb, configName, true)
+        end
         return true, "Config saved to in-memory store"
     end
 end
 
 function ConfigEngine:LoadConfig(configName: string, silent: boolean?): (boolean, string?)
     assert(type(configName) == "string" and configName ~= "", "[SodiumUI.Config] Invalid config name")
+    local startTime = os.clock()
     local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
     
     local jsonString: string?
-    if self:_hasUNC() then
-        local isfile = getExecutorFunc("isfile")
-        local readfile = getExecutorFunc("readfile")
-        
-        if type(isfile) == "function" and isfile(filePath) and type(readfile) == "function" then
-            local readOk, res = pcall(readfile, filePath)
-            if readOk and type(res) == "string" and res ~= "" then
-                jsonString = res
-            end
-        end
+    if FS.hasFS() then
+        jsonString = FS.readFile(filePath)
     else
         jsonString = self.InMemoryStorage[configName]
     end
     
-    if not jsonString then
+    if not jsonString or jsonString == "" then
         local err = string.format("Config '%s' does not exist", configName)
-        warn("[SodiumUI.Config] " .. err)
         return false, err
     end
     
     local decodeOk, decoded = pcall(HttpService.JSONDecode, HttpService, jsonString)
     if not decodeOk or type(decoded) ~= "table" then
-        warn("[SodiumUI.Config] Failed to parse config JSON")
         return false, "Corrupted or invalid JSON config file"
     end
     
@@ -3680,37 +3864,75 @@ function ConfigEngine:LoadConfig(configName: string, silent: boolean?): (boolean
         return false, "Config contains no valid flags table"
     end
     
+    -- ========================================================================
+    -- ATOMIC BATCH TRANSACTION: Apply flags without UI lag spikes or loopback
+    -- ========================================================================
+    self._isBatchLoading = true
     self.ActiveConfig = configName
-    self:_writeState({ selected = configName })
+    local sFlags, flagsJson = pcall(HttpService.JSONEncode, HttpService, flags)
+    self._lastSavedSnapshots[configName] = if sFlags then flagsJson else jsonString
     
+    local updatedCount = 0
+    local pendingCallbacks = {}
+    
+    -- Phase 1: In-memory cache update & instant visual application
     for flag, rawVal in pairs(flags) do
         local val = deserializeValue(rawVal)
         self.Flags[flag] = val
+        
         local handler = self._handlers[flag]
         if handler then
-            pcall(handler.Set, val, silent)
-        end
-        
-        local listeners = self._listeners[flag]
-        if listeners then
-            for _, cb in ipairs(listeners) do
-                task.spawn(cb, val)
+            -- skipCallback = true, animate = false (Instant visual apply, zero animation backlog)
+            pcall(handler.Set, val, true, false)
+            updatedCount = updatedCount + 1
+            
+            if not silent then
+                table.insert(pendingCallbacks, { handler = handler, val = val, flag = flag })
             end
         end
     end
     
-    return true, "Config loaded successfully"
+    -- Phase 2: Deferred isolated callbacks execution (if not silent)
+    if not silent and #pendingCallbacks > 0 then
+        task.defer(function()
+            for _, item in ipairs(pendingCallbacks) do
+                -- Invoke element callback safely
+                pcall(item.handler.Set, item.val, false, false)
+                
+                -- Invoke flag change listeners
+                local listeners = self._listeners[item.flag]
+                if listeners then
+                    for _, cb in ipairs(listeners) do
+                        task.spawn(cb, item.val)
+                    end
+                end
+            end
+        end)
+    end
+    
+    -- Phase 3: Update state file
+    self:_writeState({ selected = configName })
+    self._isBatchLoading = false
+    
+    local elapsedMs = math.floor((os.clock() - startTime) * 1000)
+    local stats = {
+        configName = configName,
+        flagCount = updatedCount,
+        elapsedMs = elapsedMs,
+    }
+    
+    for _, cb in ipairs(self._configLoadedListeners) do
+        task.spawn(cb, configName, stats)
+    end
+    
+    return true, string.format("Loaded %d flags in %dms", updatedCount, elapsedMs)
 end
 
 function ConfigEngine:ExportConfig(configName: string): (string?, string?)
     local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
-    if self:_hasUNC() then
-        local isfile = getExecutorFunc("isfile")
-        local readfile = getExecutorFunc("readfile")
-        if type(isfile) == "function" and isfile(filePath) and type(readfile) == "function" then
-            local s, res = pcall(readfile, filePath)
-            if s and res then return res, nil end
-        end
+    if FS.hasFS() then
+        local content = FS.readFile(filePath)
+        if content then return content, nil end
     else
         local data = self.InMemoryStorage[configName]
         if data then return data, nil end
@@ -3725,61 +3947,66 @@ function ConfigEngine:ImportConfig(configName: string, jsonString: string): (boo
     end
     
     local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
-    if self:_hasUNC() then
-        self:_ensureDirectories()
-        local writefile = getExecutorFunc("writefile")
-        if type(writefile) == "function" then
-            local s, err = pcall(writefile, filePath, jsonString)
-            if not s then return false, tostring(err) end
-            return true, "Imported and saved successfully"
-        end
-        return false, "writefile not available"
+    if FS.hasFS() then
+        local ok, err = FS.writeFile(filePath, jsonString)
+        if not ok then return false, tostring(err) end
+        self._lastSavedSnapshots[configName] = jsonString
+        return true, "Imported and saved successfully"
     else
         self.InMemoryStorage[configName] = jsonString
+        self._lastSavedSnapshots[configName] = jsonString
         return true, "Imported to memory"
     end
 end
 
 function ConfigEngine:DeleteConfig(configName: string): boolean
     local filePath = string.format("%s/%s.json", self.ConfigsFolder, configName)
-    if self:_hasUNC() then
-        local isfile = getExecutorFunc("isfile")
-        local delfile = getExecutorFunc("delfile")
-        if type(isfile) == "function" and type(delfile) == "function" and isfile(filePath) then
-            pcall(delfile, filePath)
-            return true
+    self._lastSavedSnapshots[configName] = nil
+    if FS.hasFS() then
+        local ok = FS.deleteFile(filePath)
+        if self.ActiveConfig == configName then
+            self.ActiveConfig = "Default"
+            self:_writeState({ selected = "Default" })
         end
+        return ok
     else
         self.InMemoryStorage[configName] = nil
+        if self.ActiveConfig == configName then
+            self.ActiveConfig = "Default"
+        end
         return true
     end
-    return false
 end
 
 function ConfigEngine:GetConfigs(): { string }
     local configs = {}
-    if self:_hasUNC() then
-        local listfiles = getExecutorFunc("listfiles")
-        local isfolder = getExecutorFunc("isfolder")
-        
-        if type(listfiles) == "function" and type(isfolder) == "function" and isfolder(self.ConfigsFolder) then
-            local files = listfiles(self.ConfigsFolder)
-            for _, f in ipairs(files) do
-                local name = f:match("([^/\\]+)%.json$")
-                if name then
-                    table.insert(configs, name)
-                end
+    if FS.hasFS() then
+        local files = FS.listFiles(self.ConfigsFolder)
+        for _, f in ipairs(files) do
+            -- Universal file name extraction pattern (works across all executors)
+            local name = string.match(f, "([^/\\]+)%.json$")
+            if name and name ~= "" and name ~= "__state" then
+                table.insert(configs, name)
             end
         end
     else
         for name in pairs(self.InMemoryStorage) do
-            table.insert(configs, name)
+            if name ~= "__state" then
+                table.insert(configs, name)
+            end
         end
     end
     table.sort(configs)
     return configs
 end
 
+function ConfigEngine:AllConfigs(): { string }
+    return self:GetConfigs()
+end
+
+-- ============================================================================
+-- 6. STATE TRACKING (__state.json)
+-- ============================================================================
 
 function ConfigEngine:_readState(): { [string]: any }
     local state = {
@@ -3788,25 +4015,21 @@ function ConfigEngine:_readState(): { [string]: any }
         autosave = self.AutoSaveEnabled or false,
     }
     
-    if self:_hasUNC() then
-        local isfile = getExecutorFunc("isfile")
-        local readfile = getExecutorFunc("readfile")
-        if type(isfile) == "function" and isfile(self.StateFile) and type(readfile) == "function" then
-            local s, raw = pcall(readfile, self.StateFile)
-            if s and type(raw) == "string" and raw ~= "" then
-                local s2, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
-                if s2 and type(decoded) == "table" then
-                    if type(decoded.selected) == "string" and decoded.selected ~= "" then
-                        state.selected = decoded.selected
-                        self.ActiveConfig = decoded.selected
-                    end
-                    if type(decoded.autoload) == "boolean" then
-                        state.autoload = decoded.autoload
-                    end
-                    if type(decoded.autosave) == "boolean" then
-                        state.autosave = decoded.autosave
-                        self.AutoSaveEnabled = decoded.autosave
-                    end
+    if FS.hasFS() and FS.isFile(self.StateFile) then
+        local raw = FS.readFile(self.StateFile)
+        if raw and raw ~= "" then
+            local s2, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+            if s2 and type(decoded) == "table" then
+                if type(decoded.selected) == "string" and decoded.selected ~= "" then
+                    state.selected = decoded.selected
+                    self.ActiveConfig = decoded.selected
+                end
+                if type(decoded.autoload) == "boolean" then
+                    state.autoload = decoded.autoload
+                end
+                if type(decoded.autosave) == "boolean" then
+                    state.autosave = decoded.autosave
+                    self.AutoSaveEnabled = decoded.autosave
                 end
             end
         end
@@ -3830,11 +4053,10 @@ function ConfigEngine:_writeState(patch: { [string]: any }?)
         self.AutoSaveEnabled = patch.autosave
     end
     
-    if self:_hasUNC() then
-        self:_ensureDirectories()
-        local writefile = getExecutorFunc("writefile")
-        if type(writefile) == "function" then
-            pcall(writefile, self.StateFile, HttpService:JSONEncode(state))
+    if FS.hasFS() then
+        local s, encoded = pcall(HttpService.JSONEncode, HttpService, state)
+        if s and encoded then
+            FS.writeFile(self.StateFile, encoded)
         end
     end
     
@@ -3853,7 +4075,7 @@ end
 function ConfigEngine:CheckAndAutoLoad(): (boolean, string?)
     local state = self:_readState()
     if state.autoload == true and state.selected and state.selected ~= "" then
-        return self:LoadConfig(state.selected, true)
+        return self:LoadConfig(state.selected, false)
     end
     return false, "Auto-load disabled"
 end
@@ -3861,10 +4083,6 @@ end
 function ConfigEngine:CreateConfig(name: string)
     assert(type(name) == "string" and name ~= "", "[SodiumUI.Config] Invalid config name")
     return ConfigFile.new(self, name)
-end
-
-function ConfigEngine:AllConfigs(): { string }
-    return self:GetConfigs()
 end
 
 function ConfigEngine:Init(window: any)
@@ -3877,19 +4095,26 @@ function ConfigEngine:Init(window: any)
 end
 
 function ConfigEngine:ResetToDefaults(silent: boolean?)
+    self._isBatchLoading = true
     for flag, handler in pairs(self._handlers) do
         if handler.Default ~= nil then
-            pcall(handler.Set, handler.Default, silent)
             self.Flags[flag] = handler.Default
+            pcall(handler.Set, handler.Default, true, false)
             
-            local listeners = self._listeners[flag]
-            if listeners then
-                for _, cb in ipairs(listeners) do
-                    task.spawn(cb, handler.Default)
-                end
+            if not silent then
+                task.spawn(function()
+                    pcall(handler.Set, handler.Default, false, false)
+                    local listeners = self._listeners[flag]
+                    if listeners then
+                        for _, cb in ipairs(listeners) do
+                            task.spawn(cb, handler.Default)
+                        end
+                    end
+                end)
             end
         end
     end
+    self._isBatchLoading = false
 end
 
 return ConfigEngine
@@ -4044,54 +4269,79 @@ local function cleanupStackConnections()
     table.clear(stackConnections)
 end
 
-local function getOrCreateStack(root: Instance): Frame
+local function getOrCreateStack(root: Instance?): Frame?
     if toastStackContainer and toastStackContainer.Parent then
         return toastStackContainer
     end
     
     cleanupStackConnections()
     
-    local stack = Instance.new("Frame")
-    stack.Name = "ToastNotificationStack"
-    stack.AnchorPoint = Vector2.new(1, 0)
-    stack.BackgroundTransparency = 1
-    stack.ZIndex = 9999999
-    
-    updateStackGeometry(stack)
-    
-    local list = Instance.new("UIListLayout")
-    list.SortOrder = Enum.SortOrder.LayoutOrder
-    list.Padding = UDim.new(0, 8)
-    list.VerticalAlignment = Enum.VerticalAlignment.Top
-    list.HorizontalAlignment = Enum.HorizontalAlignment.Right
-    list.Parent = stack
-    
-    -- Auto adapt to screen resize / rotation
-    local camera = workspace.CurrentCamera
-    if camera then
-        table.insert(stackConnections, camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-            if stack and stack.Parent then
-                updateStackGeometry(stack)
-            end
-        end))
-    end
-    table.insert(stackConnections, workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-        local newCam = workspace.CurrentCamera
-        if newCam then
-            table.insert(stackConnections, newCam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-                if stack and stack.Parent then
-                    updateStackGeometry(stack)
+    local ok, stack = pcall(function()
+        local s = Instance.new("Frame")
+        s.Name = "ToastNotificationStack"
+        s.AnchorPoint = Vector2.new(1, 0)
+        s.BackgroundTransparency = 1
+        s.ZIndex = 9999999
+        
+        updateStackGeometry(s)
+        
+        local list = Instance.new("UIListLayout")
+        list.SortOrder = Enum.SortOrder.LayoutOrder
+        list.Padding = UDim.new(0, 8)
+        list.VerticalAlignment = Enum.VerticalAlignment.Top
+        list.HorizontalAlignment = Enum.HorizontalAlignment.Right
+        list.Parent = s
+        
+        -- Auto adapt to screen resize / rotation
+        local camera = workspace.CurrentCamera
+        if camera then
+            table.insert(stackConnections, camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+                if s and s.Parent then
+                    updateStackGeometry(s)
                 end
             end))
-            updateStackGeometry(stack)
         end
-    end))
+        table.insert(stackConnections, workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+            local newCam = workspace.CurrentCamera
+            if newCam then
+                table.insert(stackConnections, newCam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+                    if s and s.Parent then
+                        updateStackGeometry(s)
+                    end
+                end))
+                updateStackGeometry(s)
+            end
+        end))
+        
+        s.Destroying:Connect(cleanupStackConnections)
+        
+        if root then
+            local parentOk = pcall(function()
+                s.Parent = root
+            end)
+            if not parentOk then
+                -- Fallback if root parenting is restricted by thread capability
+                pcall(function()
+                    local Players = game:GetService("Players")
+                    local lp = Players.LocalPlayer
+                    if lp and lp:FindFirstChild("PlayerGui") then
+                        s.Parent = lp.PlayerGui
+                    end
+                end)
+            end
+        end
+        return s
+    end)
     
-    stack.Destroying:Connect(cleanupStackConnections)
-    
-    stack.Parent = root
-    toastStackContainer = stack
-    return stack
+    if ok and stack then
+        toastStackContainer = stack
+        return stack
+    end
+    return toastStackContainer
+end
+
+function Notification.Init(root: Instance): Frame?
+    return getOrCreateStack(root)
 end
 
 local function dismissToast(toastData: any)
@@ -4127,7 +4377,11 @@ local function dismissToast(toastData: any)
 end
 
 function Notification.Notify(rootGui: Instance, props: NotifyProps)
-    local stack = getOrCreateStack(rootGui)
+    -- Decouple notification dispatch via task.defer to run in scheduler context
+    task.defer(function()
+        local success, notifyErr = pcall(function()
+            local stack = getOrCreateStack(rootGui)
+            if not stack then return end
     local duration = props.Duration or 3.2
     
     local camera = workspace.CurrentCamera
@@ -4291,6 +4545,8 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
     
     task.delay(duration, function()
         dismissToast(toastData)
+    end)
+        end)
     end)
 end
 
@@ -9918,6 +10174,9 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
     end
     self.Flags = configEngine.Flags
     self.RootGui = containerManager.ScreenGui
+    pcall(function()
+        Notification.Init(self.RootGui)
+    end)
     self.Tabs = {}
     self.Sections = {}
     self._currentSection = nil
@@ -12438,7 +12697,9 @@ function Window:Popup(props: any)
 end
 
 function Window:Notify(props: any)
-    Notification.Notify(self.RootGui, props)
+    pcall(function()
+        Notification.Notify(self.RootGui, props)
+    end)
 end
 
 function Window:SetToggleKey(keyCode: Enum.KeyCode | string)
