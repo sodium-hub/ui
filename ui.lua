@@ -8055,21 +8055,55 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
     Theme.Bind(popover, "BackgroundColor3", "Card")
     Theme.Bind(popStroke, "Color", "BorderStrong")
     
+    local function isItemMatch(selectedValue: any, targetTitle: string, targetVal: any?): boolean
+        if selectedValue == nil then return false end
+        if selectedValue == targetTitle or tostring(selectedValue) == targetTitle then return true end
+        if targetVal ~= nil and (selectedValue == targetVal or tostring(selectedValue) == tostring(targetVal)) then
+            return true
+        end
+        if type(selectedValue) == "table" then
+            local selTitle = selectedValue.Title or selectedValue.Name or selectedValue.Value
+            if selTitle and (selTitle == targetTitle or tostring(selTitle) == targetTitle) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function isItemInList(selectedList: any, targetTitle: string, targetVal: any?): (boolean, number?)
+        if type(selectedList) ~= "table" then
+            if selectedList ~= nil and isItemMatch(selectedList, targetTitle, targetVal) then
+                return true, 1
+            end
+            return false, nil
+        end
+        for idx, item in ipairs(selectedList) do
+            if isItemMatch(item, targetTitle, targetVal) then
+                return true, idx
+            end
+        end
+        return false, nil
+    end
+
     local function updateDisplay()
         if self.Multi then
-            local count = #self.Selected
+            local count = (type(self.Selected) == "table" and #self.Selected) or 0
             if count == 0 then
                 selectedText.Text = "None"
                 selectedText.TextColor3 = Theme.GetToken("Placeholder")
             elseif count == 1 then
-                selectedText.Text = self.Selected[1]
+                selectedText.Text = tostring(self.Selected[1])
                 selectedText.TextColor3 = Theme.GetToken("TextPrimary")
             else
-                selectedText.Text = string.format("%d selected (%s)", count, table.concat(self.Selected, ", "))
+                local strList = {}
+                for _, it in ipairs(self.Selected) do
+                    table.insert(strList, tostring(it))
+                end
+                selectedText.Text = string.format("%d selected (%s)", count, table.concat(strList, ", "))
                 selectedText.TextColor3 = Theme.GetToken("TextPrimary")
             end
         else
-            if self.Selected and self.Selected ~= "" then
+            if self.Selected and tostring(self.Selected) ~= "" and tostring(self.Selected) ~= "nil" then
                 selectedText.Text = tostring(self.Selected)
                 selectedText.TextColor3 = Theme.GetToken("TextPrimary")
             else
@@ -8078,9 +8112,34 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
             end
         end
     end
-    
-    self.UpdateDisplay = updateDisplay
-    
+
+    local function updateOptionStates()
+        for _, child in ipairs(popover:GetChildren()) do
+            if child:IsA("GuiObject") and child.Name:sub(1, 4) == "Opt_" then
+                local optTitle = child:GetAttribute("ItemTitle") or child.Name:sub(5)
+                local optVal = child:GetAttribute("ItemValue")
+                
+                local isSel = false
+                if self.Multi then
+                    isSel = isItemInList(self.Selected, optTitle, optVal)
+                else
+                    isSel = isItemMatch(self.Selected, optTitle, optVal)
+                end
+                
+                local optLabel = child:FindFirstChild("Label")
+                if optLabel and optLabel:IsA("TextLabel") then
+                    optLabel.TextColor3 = if isSel then Theme.GetToken("Accent") else Theme.GetToken("TextPrimary")
+                end
+                
+                local check = child:FindFirstChild("Check")
+                if check and check:IsA("ImageLabel") then
+                    check.Visible = isSel
+                    check.ImageColor3 = Theme.GetToken("Accent")
+                end
+            end
+        end
+    end
+
     local function rebuildOptions()
         for _, child in ipairs(popover:GetChildren()) do
             if child:IsA("GuiObject") and child.Name:sub(1, 4) == "Opt_" then
@@ -8089,11 +8148,15 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
         end
         
         for i, valItem in ipairs(self.Values) do
-            local itemTitle = if type(valItem) == "table" then (valItem :: any).Title else tostring(valItem)
+            local rawTitle = if type(valItem) == "table" then (valItem :: any).Title else valItem
+            local itemTitle = Locale.Resolve(rawTitle)
+            local rawItemVal = if type(valItem) == "table" and (valItem :: any).Value ~= nil then (valItem :: any).Value else itemTitle
             local itemIcon = if type(valItem) == "table" then (valItem :: any).Icon else nil
             
             local optBtn = Instance.new("TextButton")
-            optBtn.Name = "Opt_" .. itemTitle
+            optBtn.Name = "Opt_" .. tostring(itemTitle)
+            optBtn:SetAttribute("ItemTitle", tostring(itemTitle))
+            optBtn:SetAttribute("ItemValue", tostring(rawItemVal))
             optBtn.Size = UDim2.new(1, 0, 0, 26)
             optBtn.BackgroundColor3 = Theme.GetToken("SurfaceHover")
             optBtn.BackgroundTransparency = 1
@@ -8125,6 +8188,13 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
                 optOffset = 20
             end
             
+            local isSel = false
+            if self.Multi then
+                isSel = isItemInList(self.Selected, itemTitle, rawItemVal)
+            else
+                isSel = isItemMatch(self.Selected, itemTitle, rawItemVal)
+            end
+            
             local optLabel = Instance.new("TextLabel")
             optLabel.Name = "Label"
             optLabel.Size = UDim2.new(1, -optOffset - 20, 1, 0)
@@ -8132,7 +8202,7 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
             optLabel.BackgroundTransparency = 1
             Theme.ApplyTypography(optLabel, "Body", "Sub")
             optLabel.Text = itemTitle
-            optLabel.TextColor3 = Theme.GetToken("TextPrimary")
+            optLabel.TextColor3 = if isSel then Theme.GetToken("Accent") else Theme.GetToken("TextPrimary")
             optLabel.TextXAlignment = Enum.TextXAlignment.Left
             optLabel.ZIndex = 152
             optLabel.Parent = optBtn
@@ -8146,14 +8216,7 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
             check.ImageColor3 = Theme.GetToken("Accent")
             check.ZIndex = 152
             Icons.Apply(check, "check")
-            
-            local isSelected = false
-            if self.Multi then
-                isSelected = table.find(self.Selected, itemTitle) ~= nil
-            else
-                isSelected = self.Selected == itemTitle
-            end
-            check.Visible = isSelected
+            check.Visible = isSel
             check.Parent = optBtn
             
             optBtn.MouseEnter:Connect(function()
@@ -8165,37 +8228,33 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
             
             optBtn.Activated:Connect(function()
                 if self.Multi then
-                    local idx = table.find(self.Selected, itemTitle)
-                    if idx then
+                    local itemExists, idx = isItemInList(self.Selected, itemTitle, rawItemVal)
+                    if itemExists and idx then
                         if #self.Selected > 1 or self.AllowNone then
                             table.remove(self.Selected, idx)
-                            check.Visible = false
                         end
                     else
                         table.insert(self.Selected, itemTitle)
-                        check.Visible = true
                     end
                     updateDisplay()
+                    updateOptionStates()
                     if self.Callback then
                         self.Callback(table.clone(self.Selected))
                     end
                 else
-                    if self.Selected == itemTitle then
-                        self.Selected = nil
-                        updateDisplay()
-                        rebuildOptions()
-                        self:Close()
-                        if self.Callback then
-                            self.Callback(nil)
+                    if isItemMatch(self.Selected, itemTitle, rawItemVal) then
+                        if self.AllowNone then
+                            self.Selected = nil
                         end
+                        -- When AllowNone is false, do not deselect! Keep it selected!
                     else
                         self.Selected = itemTitle
-                        updateDisplay()
-                        rebuildOptions()
-                        self:Close()
-                        if self.Callback then
-                            self.Callback(self.Selected)
-                        end
+                    end
+                    updateDisplay()
+                    updateOptionStates()
+                    self:Close()
+                    if self.Callback then
+                        self.Callback(self.Selected)
                     end
                 end
             end)
@@ -8203,35 +8262,17 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
             optBtn.Parent = popover
         end
     end
-    
-    local function updateOptionColors()
-        for _, child in ipairs(popover:GetChildren()) do
-            if child:IsA("GuiObject") and child.Name:sub(1, 4) == "Opt_" then
-                local optLabel = child:FindFirstChild("Label")
-                if optLabel and optLabel:IsA("TextLabel") then
-                    local isSel = false
-                    if self.Multi then
-                        isSel = table.find(self.Selected, child.Name:sub(5)) ~= nil
-                    else
-                        isSel = (self.Selected == child.Name:sub(5))
-                    end
-                    optLabel.TextColor3 = if isSel then Theme.GetToken("Accent") else Theme.GetToken("TextPrimary")
-                end
-                local check = child:FindFirstChild("Check")
-                if check and check:IsA("ImageLabel") then
-                    check.ImageColor3 = Theme.GetToken("Accent")
-                end
-            end
-        end
-    end
 
+    self.UpdateDisplay = updateDisplay
+    self.UpdateOptionStates = updateOptionStates
     self.RebuildOptions = rebuildOptions
     rebuildOptions()
     updateDisplay()
+    updateOptionStates()
     
     table.insert(self._connections, Theme.Changed:Connect(function()
         updateDisplay()
-        updateOptionColors()
+        updateOptionStates()
     end))
     
     trigger.Activated:Connect(function()
@@ -8268,6 +8309,10 @@ function Dropdown:Open()
         self.ParentCard.ZIndex = 50
     end
     self.Container.ZIndex = 100
+    
+    if self.UpdateOptionStates then
+        self.UpdateOptionStates()
+    end
     
     local optCount = #self.Values
     local targetH = math.clamp(optCount * 28 + 8, 40, 140)
@@ -8349,12 +8394,28 @@ end
 
 function Dropdown:Set(val: any, skipCallback: boolean?)
     if self.Multi then
-        self.Selected = if type(val) == "table" then val else { tostring(val) }
+        if type(val) == "table" then
+            self.Selected = table.clone(val)
+        elseif val ~= nil and val ~= "" then
+            self.Selected = { tostring(val) }
+        else
+            self.Selected = {}
+        end
     else
-        self.Selected = tostring(val)
+        if val == nil then
+            self.Selected = if self.AllowNone then nil else self.Selected
+        elseif type(val) == "table" then
+            local first = val[1] or val.Title or val.Value or val.Name
+            self.Selected = if first ~= nil then tostring(first) else self.Selected
+        else
+            self.Selected = tostring(val)
+        end
     end
     self:RebuildOptions()
     self.UpdateDisplay()
+    if self.UpdateOptionStates then
+        self.UpdateOptionStates()
+    end
     
     if not skipCallback and self.Callback then
         self.Callback(self.Selected)
@@ -8369,6 +8430,9 @@ function Dropdown:Clear(skipCallback: boolean?)
     end
     self:RebuildOptions()
     self.UpdateDisplay()
+    if self.UpdateOptionStates then
+        self.UpdateOptionStates()
+    end
     if not skipCallback and self.Callback then
         self.Callback(self.Selected)
     end
@@ -8383,6 +8447,9 @@ function Dropdown:Refresh(newValues: { DropdownItem })
     self.Values = newValues
     self:RebuildOptions()
     self.UpdateDisplay()
+    if self.UpdateOptionStates then
+        self.UpdateOptionStates()
+    end
 end
 
 function Dropdown:SetTitle(title: string)
@@ -10048,7 +10115,8 @@ end
 
 function Tab:_getOrCreateDefaultSection()
     if not self._defaultSection then
-        self._defaultSection = self:Section({ Title = self.Title .. " Controls" })
+        local rawTitle = Locale.Resolve(self.Title or "Tab")
+        self._defaultSection = self:Section({ Title = tostring(rawTitle) .. " Controls" })
     end
     return self._defaultSection
 end
