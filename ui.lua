@@ -117,6 +117,131 @@ end
 return Signal
 end
 
+_MODULES['Core/Locale'] = function()
+--[=[
+    Sodium UI - Core/Locale.luau
+    Reactive Multi-Language (I18n) Engine with dynamic token and text observers.
+    Zero external dependencies, zero overhead for static strings.
+]=]
+
+local Signals = _require("Core/Signals")
+
+local Locale = {}
+Locale.__index = Locale
+
+export type LocalizedString = string | { [string]: string }
+
+local CurrentLanguage = "EN"
+Locale.Changed = Signals.new()
+
+-- Weak-keyed table to store instance bindings: instance -> array of { property: string, source: { [string]: string } }
+local boundTextInstances: { [Instance]: { { property: string, source: { [string]: string } } } } = setmetatable({}, { __mode = "k" })
+
+-- Helper to resolve any LocalizedString according to the current or requested language
+function Locale.Resolve(source: any, targetLang: string?): string
+    if source == nil then
+        return ""
+    end
+    if type(source) == "string" then
+        return source
+    end
+    if type(source) == "table" then
+        local lang = targetLang or CurrentLanguage
+        local upperLang = lang:upper()
+        
+        -- Exact match
+        if source[lang] ~= nil then
+            return tostring(source[lang])
+        end
+        if source[upperLang] ~= nil then
+            return tostring(source[upperLang])
+        end
+        
+        -- Case-insensitive key match
+        for k, v in pairs(source) do
+            if tostring(k):upper() == upperLang then
+                return tostring(v)
+            end
+        end
+        
+        -- Fallback to EN / en
+        if source["EN"] ~= nil then
+            return tostring(source["EN"])
+        end
+        if source["en"] ~= nil then
+            return tostring(source["en"])
+        end
+        
+        -- Fallback to first string value found in table
+        for _, v in pairs(source) do
+            if type(v) == "string" then
+                return v
+            end
+        end
+    end
+    return tostring(source)
+end
+
+-- Bind a TextLabel, TextButton, or TextBox property (e.g. "Text" or "PlaceholderText") to a reactive localized table
+function Locale.Bind(instance: Instance, property: string, source: any)
+    if not instance then return end
+    
+    if type(source) ~= "table" then
+        -- Static string: assign once without observer overhead
+        pcall(function()
+            (instance :: any)[property] = Locale.Resolve(source)
+        end)
+        return
+    end
+    
+    -- Assign initial resolved text
+    pcall(function()
+        (instance :: any)[property] = Locale.Resolve(source)
+    end)
+    
+    -- Register in reactive observer table
+    local list = boundTextInstances[instance]
+    if not list then
+        list = {}
+        boundTextInstances[instance] = list
+    end
+    table.insert(list, {
+        property = property,
+        source = source,
+    })
+end
+
+-- Set active UI language and reactively update all bound text instances instantaneously
+function Locale.SetLanguage(lang: string)
+    local upper = lang:upper()
+    if CurrentLanguage == upper then
+        return
+    end
+    CurrentLanguage = upper
+    Locale.Changed:Fire(upper)
+    
+    for instance, bindings in pairs(boundTextInstances) do
+        if instance and instance.Parent then
+            for _, item in ipairs(bindings) do
+                local newText = Locale.Resolve(item.source, upper)
+                pcall(function()
+                    (instance :: any)[item.property] = newText
+                end)
+            end
+        else
+            boundTextInstances[instance] = nil
+        end
+    end
+end
+
+-- Get current active language
+function Locale.GetLanguage(): string
+    return CurrentLanguage
+end
+
+return Locale
+end
+
 _MODULES['Core/Theme'] = function()
 --[=[
     Sodium UI - Core/Theme.luau
@@ -299,24 +424,91 @@ function Theme.SetTheme(name: string)
     end
 end
 
--- High-Definition Typography Standards (Anti-aliased, distortion-free hierarchy)
+local UserInputService = game:GetService("UserInputService")
+
+local function isMobileDevice(): boolean
+    return UserInputService.TouchEnabled or (not UserInputService.KeyboardEnabled)
+end
+
+-- High-Definition Typography Standards (Google Font 'Prompt' for razor-sharp Thai & English vector rendering)
+Theme.FontFaces = {
+    Display = Font.fromName("Prompt", Enum.FontWeight.Bold),
+    Title = Font.fromName("Prompt", Enum.FontWeight.Bold),
+    Header = Font.fromName("Prompt", Enum.FontWeight.SemiBold),
+    Body = Font.fromName("Prompt", Enum.FontWeight.Medium),
+    Sub = Font.fromName("Prompt", Enum.FontWeight.Medium),
+    Code = Font.fromName("RobotoMono", Enum.FontWeight.Medium),
+}
+
+-- Engine Font Fallbacks
 Theme.Fonts = {
-    Title = Enum.Font.GothamBold,
-    Header = Enum.Font.GothamMedium,
-    Body = Enum.Font.GothamMedium,
-    Sub = Enum.Font.GothamMedium,
+    Display = Enum.Font.BuilderSansBold,
+    Title = Enum.Font.BuilderSansBold,
+    Header = Enum.Font.BuilderSansMedium,
+    Body = Enum.Font.BuilderSans,
+    Sub = Enum.Font.BuilderSans,
     Code = Enum.Font.RobotoMono,
 }
 
-Theme.FontSizes = {
-    Display = 16,
-    Title = 14,
-    Header = 13,
-    Body = 13,
-    Sub = 12,
-    Small = 11,
-    Code = 11,
-}
+-- Centralized Dynamic Font Sizing (Adaptive Desktop vs Mobile Hierarchy)
+function Theme.GetFontSize(sizeRole: string): number
+    local mobile = isMobileDevice()
+    local sizes = if mobile then {
+        Display = 20,
+        Title = 17,
+        Header = 17,
+        Body = 16,
+        Sub = 15,
+        Small = 13,
+        Code = 13,
+    } else {
+        Display = 18,
+        Title = 15,
+        Header = 15,
+        Body = 14,
+        Sub = 13,
+        Small = 12,
+        Code = 12,
+    }
+    return (sizes :: any)[sizeRole] or (if mobile then 15 else 13)
+end
+
+-- Responsive Typography Hierarchy (Metatable-driven for instantaneous device adaptation)
+Theme.FontSizes = setmetatable({}, {
+    __index = function(_, key)
+        return Theme.GetFontSize(tostring(key))
+    end
+}) :: any
+
+Theme.IsMobile = isMobileDevice()
+
+-- Central helper to apply HD vector typography and responsive text sizes
+function Theme.ApplyTypography(instance: Instance, role: string, sizeRole: string?)
+    local fontFace = Theme.FontFaces[role]
+    local appliedFace = false
+    if fontFace then
+        local ok = pcall(function()
+            (instance :: any).FontFace = fontFace
+        end)
+        appliedFace = ok
+    end
+    if not appliedFace then
+        local enumFont = Theme.Fonts[role]
+        if enumFont then
+            pcall(function()
+                (instance :: any).Font = enumFont
+            end)
+        end
+    end
+    if sizeRole then
+        local targetSize = Theme.GetFontSize(sizeRole)
+        if targetSize then
+            pcall(function()
+                (instance :: any).TextSize = targetSize
+            end)
+        end
+    end
+end
 
 -- Sleek & Crisp Corner Radii (less rounded, modern technical aesthetic)
 Theme.Radii = {
@@ -3008,9 +3200,9 @@ function Container:_updateScaling(immediate: boolean?)
     local scaleX = availW / baseW
     local scaleH = availH / baseH
     
-    -- Strictly clamp so the entire window fits both horizontally and vertically
+    -- Strictly clamp so the entire window fits both horizontally and vertically with legible text
     local fitScale = math.min(scaleX, scaleH)
-    local minScale = if self.IsMobile then 0.35 else 0.45
+    local minScale = if self.IsMobile then 0.52 else 0.50
     local dpiMax = math.clamp(vp.X / 1920, 1.0, 1.85)
     local targetScale = math.clamp(fitScale, minScale, dpiMax)
     
@@ -4015,10 +4207,9 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
     titleLabel.Size = UDim2.new(1, -22, 0, 16)
     titleLabel.Position = UDim2.new(0, 22, 0, 0)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Theme.Fonts.Title
+    Theme.ApplyTypography(titleLabel, "Title", "Header")
     titleLabel.Text = props.Title
     titleLabel.TextColor3 = Theme.GetToken("TextPrimary")
-    titleLabel.TextSize = 12
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = contentFrame
@@ -4032,10 +4223,9 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
         contentLabel.Position = UDim2.new(0, 22, 0, 18)
         contentLabel.AutomaticSize = Enum.AutomaticSize.Y
         contentLabel.BackgroundTransparency = 1
-        contentLabel.Font = Theme.Fonts.Body
+        Theme.ApplyTypography(contentLabel, "Body", "Sub")
         contentLabel.Text = props.Content
         contentLabel.TextColor3 = Theme.GetToken("TextMuted")
-        contentLabel.TextSize = 11
         contentLabel.TextWrapped = true
         contentLabel.TextXAlignment = Enum.TextXAlignment.Left
         contentLabel.Parent = contentFrame
@@ -5257,6 +5447,10 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     
     -- Check for cached key for auto-verify
     local cachedKey = nil
+    local cachedExpiresAt = nil
+    local cachedSavedAt = nil
+    local cachedPlan = nil
+    local cachedIsPremium = nil
     local cachedJson = safeReadFile(saveFileName)
     if cachedJson and #cachedJson > 0 then
         local s, decoded = pcall(function()
@@ -5264,6 +5458,10 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
         end)
         if s and type(decoded) == "table" and type(decoded.key) == "string" and #decoded.key > 0 then
             cachedKey = decoded.key
+            cachedExpiresAt = decoded.expires_at
+            cachedSavedAt = decoded.saved_at
+            cachedPlan = decoded.plan
+            cachedIsPremium = decoded.is_premium
         else
             local rawTrimmed = cachedJson:gsub("^%s+", ""):gsub("%s+$", "")
             if #rawTrimmed > 0 and not string.find(rawTrimmed, "^{") then
@@ -5854,22 +6052,54 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
                     genv.SCRIPT_KEY = cleanKey
                 end
                 
-                -- Determine expiration timestamp
-                local keyExpires = res.expires_at or (genv and genv.JD_EXPIRES_AT)
-                if not keyExpires then
-                    if res.plan == "Premium" or (res.message and res.message:lower() == "lifetime") then
-                        keyExpires = "Lifetime"
-                    elseif res.plan == "Keyless" or res.message == "KEYLESS" then
-                        keyExpires = "Lifetime"
+                -- Determine plan and expiration
+                local upperKey = cleanKey:upper()
+                local isNormal = upperKey:find("NORMAL") ~= nil or upperKey:find("FREE") ~= nil
+                local isPrem = res.is_premium
+                if isPrem == nil then
+                    isPrem = upperKey:find("PREMIUM") ~= nil
+                end
+                if isNormal then
+                    isPrem = false
+                end
+                res.is_premium = isPrem
+                
+                if not res.plan or res.plan == "" then
+                    if isPrem then
+                        res.plan = "PREMIUM"
+                    elseif res.is_keyless or res.message == "KEYLESS" then
+                        res.plan = "KEYLESS"
+                    elseif upperKey:find("NORMAL") then
+                        res.plan = "NORMAL"
+                    else
+                        res.plan = "FREE"
                     end
                 end
+                
+                local rawExpires = res.expires_at or (genv and genv.JD_EXPIRES_AT)
+                local keyExpires = "Lifetime"
+                if rawExpires and rawExpires ~= "" and rawExpires ~= "null" then
+                    local lowerExp = tostring(rawExpires):lower()
+                    if lowerExp == "lifetime" or lowerExp == "permanent" or lowerExp == "forever" or lowerExp == "inf" then
+                        keyExpires = "Lifetime"
+                    elseif tonumber(rawExpires) then
+                        keyExpires = tonumber(rawExpires)
+                    else
+                        keyExpires = rawExpires
+                    end
+                else
+                    keyExpires = "Lifetime"
+                end
+                res.expires_at = keyExpires
                 
                 -- Save key if remember is checked
                 if self.RememberKey then
                     safeWriteFile(saveFileName, HttpService:JSONEncode({
                         key = cleanKey,
-                        saved_at = getSafeTimestamp(),
+                        saved_at = cachedSavedAt or getSafeTimestamp(),
                         expires_at = keyExpires,
+                        plan = res.plan,
+                        is_premium = res.is_premium,
                     }))
                 else
                     safeDeleteFile(saveFileName)
@@ -5974,6 +6204,7 @@ _MODULES['Components/TabSection'] = function()
 ]=]
 
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 local UserInputService = game:GetService("UserInputService")
@@ -5983,7 +6214,7 @@ local TabSection = {}
 TabSection.__index = TabSection
 
 export type TabSectionProps = {
-    Title: string,
+    Title: any,
     Icon: string?,
     Opened: boolean?,
 }
@@ -5991,13 +6222,13 @@ export type TabSectionProps = {
 function TabSection.new(window: any, parent: Instance, props: TabSectionProps)
     local self = setmetatable({}, TabSection)
     self.Window = window
-    self.Title = props.Title
+    self.Title = Locale.Resolve(props.Title)
     self.Opened = if props.Opened ~= nil then props.Opened else true
     self.Tabs = {}
     self._connections = {}
     
     local container = Instance.new("Frame")
-    container.Name = "Category_" .. props.Title
+    container.Name = "Category_" .. Locale.Resolve(props.Title)
     container.Size = UDim2.new(1, 0, 0, 0)
     container.AutomaticSize = Enum.AutomaticSize.Y
     container.BackgroundTransparency = 1
@@ -6041,10 +6272,17 @@ function TabSection.new(window: any, parent: Instance, props: TabSectionProps)
     title.Size = UDim2.new(1, -offsetX - 16, 1, 0)
     title.Position = UDim2.new(0, offsetX, 0, 0)
     title.BackgroundTransparency = 1
-    title.Font = Theme.Fonts.Title
-    title.Text = string.upper(props.Title)
+    Theme.ApplyTypography(title, "Title", "Small")
+    if type(props.Title) == "table" then
+        local upperMap = {}
+        for k, v in pairs(props.Title) do
+            upperMap[k] = string.upper(tostring(v))
+        end
+        Locale.Bind(title, "Text", upperMap)
+    else
+        Locale.Bind(title, "Text", string.upper(tostring(props.Title or "")))
+    end
     title.TextColor3 = Theme.GetToken("Placeholder")
-    title.TextSize = 11
     title.TextXAlignment = Enum.TextXAlignment.Left
     Theme.Bind(title, "TextColor3", "Placeholder")
     title.Parent = header
@@ -6345,10 +6583,9 @@ function Divider.new(parent: Instance, props: DividerProps?)
         label.AnchorPoint = Vector2.new(0.5, 0.5)
         label.AutomaticSize = Enum.AutomaticSize.X
         label.BackgroundTransparency = 1
-        label.Font = Theme.Fonts.Title
+        Theme.ApplyTypography(label, "Title", "Small")
         label.Text = string.upper(title)
         label.TextColor3 = Theme.GetToken("Placeholder")
-        label.TextSize = 10
         label.Parent = container
         Theme.Bind(label, "TextColor3", "Placeholder")
         
@@ -6402,6 +6639,7 @@ _MODULES['Elements/Button'] = function()
 ]=]
 
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 
@@ -6409,8 +6647,9 @@ local Button = {}
 Button.__index = Button
 
 export type ButtonProps = {
-    Title: string,
-    Desc: string?,
+    Title: any,
+    Desc: any?,
+    Description: any?,
     Icon: string?,
     Color: Color3?,
     Justify: string?, -- "Between", "Center", "Left", "Right"
@@ -6420,12 +6659,13 @@ export type ButtonProps = {
 }
 
 function Button.new(parent: Instance, props: any)
-    local titleText = props.Title or props.Name or "Button"
+    local titleText = Locale.Resolve(props.Title or props.Name or "Button")
     local self = setmetatable({}, Button)
     self.Locked = props.Locked or false
     self.Callback = props.Callback
     
-    local isDesc = props.Desc and props.Desc ~= ""
+    local descProp = props.Desc or props.Description
+    local isDesc = descProp and (if type(descProp) == "table" then true else descProp ~= "")
     local containerHeight = if isDesc then 54 else 38
     
     -- Slot wrapper (for UIListLayout stability, stays in place while button scales into center)
@@ -6507,10 +6747,9 @@ function Button.new(parent: Instance, props: any)
     titleLabel.Size = UDim2.new(1, -iconWidth, 0, 18)
     titleLabel.Position = UDim2.new(0, textStartX, 0, if isDesc then 8 else 10)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Theme.Fonts.Header
-    titleLabel.Text = titleText
+    Theme.ApplyTypography(titleLabel, "Header", "Header")
+    Locale.Bind(titleLabel, "Text", props.Title or props.Name or "Button")
     titleLabel.TextColor3 = props.Color or Theme.GetToken("TextPrimary")
-    titleLabel.TextSize = 13
     titleLabel.TextXAlignment = textAlignment
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = btn
@@ -6522,10 +6761,9 @@ function Button.new(parent: Instance, props: any)
         descLabel.Size = UDim2.new(1, -iconWidth, 0, 16)
         descLabel.Position = UDim2.new(0, textStartX, 0, 28)
         descLabel.BackgroundTransparency = 1
-        descLabel.Font = Theme.Fonts.Body
-        descLabel.Text = props.Desc or ""
+        Theme.ApplyTypography(descLabel, "Sub", "Sub")
+        Locale.Bind(descLabel, "Text", descProp or "")
         descLabel.TextColor3 = Theme.GetToken("TextMuted")
-        descLabel.TextSize = 12
         descLabel.TextXAlignment = textAlignment
         descLabel.TextTruncate = Enum.TextTruncate.AtEnd
         descLabel.Parent = btn
@@ -6605,6 +6843,7 @@ _MODULES['Elements/Toggle'] = function()
 ]=]
 
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 
@@ -6612,8 +6851,9 @@ local Toggle = {}
 Toggle.__index = Toggle
 
 export type ToggleProps = {
-    Title: string,
-    Desc: string?,
+    Title: any,
+    Desc: any?,
+    Description: any?,
     Icon: string?,
     Value: boolean?,
     Flag: string?,
@@ -6622,7 +6862,7 @@ export type ToggleProps = {
 }
 
 function Toggle.new(parent: Instance, configEngine: any, props: any)
-    local titleText = props.Title or props.Name or "Toggle"
+    local titleText = Locale.Resolve(props.Title or props.Name or "Toggle")
     local initialVal = if props.Value ~= nil then props.Value elseif props.Default ~= nil then props.Default else false
     
     local self = setmetatable({}, Toggle)
@@ -6632,7 +6872,8 @@ function Toggle.new(parent: Instance, configEngine: any, props: any)
     self.Flag = props.Flag
     self._connections = {}
     
-    local isDesc = props.Desc and props.Desc ~= ""
+    local descProp = props.Desc or props.Description
+    local isDesc = descProp and (if type(descProp) == "table" then true else descProp ~= "")
     local containerHeight = if isDesc then 54 else 42
     
     local container = Instance.new("Frame")
@@ -6684,10 +6925,9 @@ function Toggle.new(parent: Instance, configEngine: any, props: any)
     titleLabel.Size = UDim2.new(1, -iconOffset - 26, 0, 18)
     titleLabel.Position = UDim2.new(0, iconOffset, 0, if isDesc then 9 else 12)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Theme.Fonts.Header
-    titleLabel.Text = titleText
+    Theme.ApplyTypography(titleLabel, "Header", "Header")
+    Locale.Bind(titleLabel, "Text", props.Title or props.Name or "Toggle")
     titleLabel.TextColor3 = Theme.GetToken("TextPrimary")
-    titleLabel.TextSize = 13
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = triggerBtn
@@ -6699,10 +6939,9 @@ function Toggle.new(parent: Instance, configEngine: any, props: any)
         descLabel.Size = UDim2.new(1, -iconOffset - 26, 0, 16)
         descLabel.Position = UDim2.new(0, iconOffset, 0, 29)
         descLabel.BackgroundTransparency = 1
-        descLabel.Font = Theme.Fonts.Body
-        descLabel.Text = props.Desc or ""
+        Theme.ApplyTypography(descLabel, "Sub", "Sub")
+        Locale.Bind(descLabel, "Text", descProp or "")
         descLabel.TextColor3 = Theme.GetToken("TextMuted")
-        descLabel.TextSize = 12
         descLabel.TextXAlignment = Enum.TextXAlignment.Left
         descLabel.TextTruncate = Enum.TextTruncate.AtEnd
         descLabel.Parent = triggerBtn
@@ -6862,6 +7101,7 @@ _MODULES['Elements/Slider'] = function()
 
 local UserInputService = game:GetService("UserInputService")
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 
@@ -6869,8 +7109,9 @@ local Slider = {}
 Slider.__index = Slider
 
 export type SliderProps = {
-    Title: string,
-    Desc: string?,
+    Title: any,
+    Desc: any?,
+    Description: any?,
     Icon: string?,
     Step: number?,
     Suffix: string?,
@@ -6885,7 +7126,7 @@ export type SliderProps = {
 }
 
 function Slider.new(parent: Instance, configEngine: any, props: any)
-    local titleText = props.Title or props.Name or "Slider"
+    local titleText = Locale.Resolve(props.Title or props.Name or "Slider")
     local valTable = if type(props.Value) == "table" then props.Value else {}
     local minVal = props.Min or valTable.Min or 0
     local maxVal = props.Max or valTable.Max or 100
@@ -6903,7 +7144,8 @@ function Slider.new(parent: Instance, configEngine: any, props: any)
     self.IsDragging = false
     self._connections = {}
     
-    local isDesc = props.Desc and props.Desc ~= ""
+    local descProp = props.Desc or props.Description
+    local isDesc = descProp and (if type(descProp) == "table" then true else descProp ~= "")
     local containerHeight = if isDesc then 54 else 42
     
     local container = Instance.new("Frame")
@@ -6948,10 +7190,9 @@ function Slider.new(parent: Instance, configEngine: any, props: any)
     titleLabel.Size = UDim2.new(1, -iconOffset - 168, 0, 18)
     titleLabel.Position = UDim2.new(0, iconOffset, 0, if isDesc then 8 else 12)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Theme.Fonts.Header
-    titleLabel.Text = titleText
+    Theme.ApplyTypography(titleLabel, "Header", "Header")
+    Locale.Bind(titleLabel, "Text", props.Title or props.Name or "Slider")
     titleLabel.TextColor3 = Theme.GetToken("TextPrimary")
-    titleLabel.TextSize = 13
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = container
@@ -6963,10 +7204,9 @@ function Slider.new(parent: Instance, configEngine: any, props: any)
         descLabel.Size = UDim2.new(1, -iconOffset - 168, 0, 14)
         descLabel.Position = UDim2.new(0, iconOffset, 0, 28)
         descLabel.BackgroundTransparency = 1
-        descLabel.Font = Theme.Fonts.Body
-        descLabel.Text = props.Desc or ""
+        Theme.ApplyTypography(descLabel, "Sub", "Sub")
+        Locale.Bind(descLabel, "Text", descProp or "")
         descLabel.TextColor3 = Theme.GetToken("TextMuted")
-        descLabel.TextSize = 12
         descLabel.TextXAlignment = Enum.TextXAlignment.Left
         descLabel.TextTruncate = Enum.TextTruncate.AtEnd
         descLabel.Parent = container
@@ -7002,10 +7242,9 @@ function Slider.new(parent: Instance, configEngine: any, props: any)
     badgeInput.Name = "ValueInput"
     badgeInput.Size = UDim2.fromScale(1, 1)
     badgeInput.BackgroundTransparency = 1
-    badgeInput.Font = Theme.Fonts.Code
+    Theme.ApplyTypography(badgeInput, "Code", "Small")
     badgeInput.Text = tostring(self.Value) .. self.Suffix
     badgeInput.TextColor3 = Theme.GetToken("TextPrimary")
-    badgeInput.TextSize = 11
     badgeInput.ClearTextOnFocus = false
     badgeInput.ClipsDescendants = true
     badgeInput.TextXAlignment = Enum.TextXAlignment.Center
@@ -7349,6 +7588,7 @@ _MODULES['Elements/Dropdown'] = function()
 
 local UserInputService = game:GetService("UserInputService")
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 
@@ -7357,11 +7597,12 @@ Dropdown.__index = Dropdown
 
 local currentOpenDropdown: any = nil
 
-export type DropdownItem = string | { Title: string, Icon: string? }
+export type DropdownItem = string | { Title: any, Icon: string? }
 
 export type DropdownProps = {
-    Title: string,
-    Desc: string?,
+    Title: any,
+    Desc: any?,
+    Description: any?,
     Icon: string?,
     Values: { DropdownItem },
     Value: (string | { string })?,
@@ -7373,7 +7614,7 @@ export type DropdownProps = {
 }
 
 function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCard: GuiObject?)
-    local titleText = props.Title or props.Name or "Dropdown"
+    local titleText = Locale.Resolve(props.Title or props.Name or "Dropdown")
     local rawVal = if props.Value ~= nil then props.Value else props.Default
     
     local self = setmetatable({}, Dropdown)
@@ -7394,7 +7635,8 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
         self.Selected = if type(rawVal) == "string" then rawVal else (self.Values[1] and (type(self.Values[1]) == "table" and (self.Values[1] :: any).Title or self.Values[1]) or "")
     end
     
-    local isDesc = props.Desc and props.Desc ~= ""
+    local descProp = props.Desc or props.Description
+    local isDesc = descProp and (if type(descProp) == "table" then true else descProp ~= "")
     local containerHeight = if isDesc then 68 else 54
     
     local container = Instance.new("Frame")
@@ -7428,10 +7670,9 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
     titleLabel.Size = UDim2.new(1, 0, 0, 16)
     titleLabel.Position = UDim2.new(0, 0, 0, 0)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Theme.Fonts.Header
-    titleLabel.Text = titleText
+    Theme.ApplyTypography(titleLabel, "Header", "Header")
+    Locale.Bind(titleLabel, "Text", props.Title or props.Name or "Dropdown")
     titleLabel.TextColor3 = Theme.GetToken("TextPrimary")
-    titleLabel.TextSize = 13
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = container
@@ -7443,10 +7684,9 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
         descLabel.Size = UDim2.new(1, 0, 0, 14)
         descLabel.Position = UDim2.new(0, 0, 0, 16)
         descLabel.BackgroundTransparency = 1
-        descLabel.Font = Theme.Fonts.Body
-        descLabel.Text = props.Desc or ""
+        Theme.ApplyTypography(descLabel, "Sub", "Sub")
+        Locale.Bind(descLabel, "Text", descProp or "")
         descLabel.TextColor3 = Theme.GetToken("TextMuted")
-        descLabel.TextSize = 12
         descLabel.TextXAlignment = Enum.TextXAlignment.Left
         descLabel.TextTruncate = Enum.TextTruncate.AtEnd
         descLabel.Parent = container
@@ -7482,9 +7722,8 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
     selectedText.Name = "SelectedText"
     selectedText.Size = UDim2.new(1, -20, 1, 0)
     selectedText.BackgroundTransparency = 1
-    selectedText.Font = Theme.Fonts.Body
+    Theme.ApplyTypography(selectedText, "Body", "Sub")
     selectedText.TextColor3 = Theme.GetToken("TextPrimary")
-    selectedText.TextSize = 12
     selectedText.TextXAlignment = Enum.TextXAlignment.Left
     selectedText.TextTruncate = Enum.TextTruncate.AtEnd
     selectedText.Parent = trigger
@@ -7635,10 +7874,9 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
             optLabel.Size = UDim2.new(1, -optOffset - 20, 1, 0)
             optLabel.Position = UDim2.new(0, optOffset, 0, 0)
             optLabel.BackgroundTransparency = 1
-            optLabel.Font = Theme.Fonts.Body
+            Theme.ApplyTypography(optLabel, "Body", "Sub")
             optLabel.Text = itemTitle
             optLabel.TextColor3 = Theme.GetToken("TextPrimary")
-            optLabel.TextSize = 12
             optLabel.TextXAlignment = Enum.TextXAlignment.Left
             optLabel.ZIndex = 152
             optLabel.Parent = optBtn
@@ -7937,6 +8175,7 @@ _MODULES['Elements/Input'] = function()
 ]=]
 
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 
@@ -7944,11 +8183,12 @@ local Input = {}
 Input.__index = Input
 
 export type InputProps = {
-    Title: string,
-    Desc: string?,
+    Title: any,
+    Desc: any?,
+    Description: any?,
     Icon: string?,
     Value: string?,
-    Placeholder: string?,
+    Placeholder: any?,
     ClearTextOnFocus: boolean?,
     Flag: string?,
     Locked: boolean?,
@@ -7956,18 +8196,19 @@ export type InputProps = {
 }
 
 function Input.new(parent: Instance, configEngine: any, props: any)
-    local titleText = props.Title or props.Name or "Input"
+    local titleText = Locale.Resolve(props.Title or props.Name or "Input")
     local rawVal = if props.Value ~= nil then props.Value elseif props.Default ~= nil then props.Default else ""
 
     local self = setmetatable({}, Input)
     self.Value = tostring(rawVal)
-    self.Placeholder = props.Placeholder or "Type here..."
+    self.Placeholder = Locale.Resolve(props.Placeholder or "Type here...")
     self.Locked = props.Locked or false
     self.Callback = props.Callback
     self.Flag = props.Flag
     self._connections = {}
     
-    local isDesc = props.Desc and props.Desc ~= ""
+    local descProp = props.Desc or props.Description
+    local isDesc = descProp and (if type(descProp) == "table" then true else descProp ~= "")
     local containerHeight = if isDesc then 66 else 52
     
     local container = Instance.new("Frame")
@@ -8014,10 +8255,9 @@ function Input.new(parent: Instance, configEngine: any, props: any)
     titleLabel.Size = UDim2.new(0.48, -iconOffset, 0, 18)
     titleLabel.Position = UDim2.new(0, iconOffset, 0, if isDesc then 12 else 17)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Theme.Fonts.Header
-    titleLabel.Text = titleText
+    Theme.ApplyTypography(titleLabel, "Header", "Header")
+    Locale.Bind(titleLabel, "Text", props.Title or props.Name or "Input")
     titleLabel.TextColor3 = Theme.GetToken("TextPrimary")
-    titleLabel.TextSize = 13
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = container
@@ -8029,10 +8269,9 @@ function Input.new(parent: Instance, configEngine: any, props: any)
         descLabel.Size = UDim2.new(0.48, -iconOffset, 0, 16)
         descLabel.Position = UDim2.new(0, iconOffset, 0, 32)
         descLabel.BackgroundTransparency = 1
-        descLabel.Font = Theme.Fonts.Body
-        descLabel.Text = props.Desc or ""
+        Theme.ApplyTypography(descLabel, "Sub", "Sub")
+        Locale.Bind(descLabel, "Text", descProp or "")
         descLabel.TextColor3 = Theme.GetToken("TextMuted")
-        descLabel.TextSize = 12
         descLabel.TextXAlignment = Enum.TextXAlignment.Left
         descLabel.TextTruncate = Enum.TextTruncate.AtEnd
         descLabel.Parent = container
@@ -8065,12 +8304,11 @@ function Input.new(parent: Instance, configEngine: any, props: any)
     textBox.Name = "TextBox"
     textBox.Size = UDim2.new(1, -22, 1, 0)
     textBox.BackgroundTransparency = 1
-    textBox.Font = Theme.Fonts.Body
+    Theme.ApplyTypography(textBox, "Body", "Sub")
     textBox.Text = self.Value
-    textBox.PlaceholderText = self.Placeholder
+    Locale.Bind(textBox, "PlaceholderText", props.Placeholder or "Type here...")
     textBox.PlaceholderColor3 = Theme.GetToken("Placeholder")
     textBox.TextColor3 = Theme.GetToken("TextPrimary")
-    textBox.TextSize = 12
     textBox.TextXAlignment = Enum.TextXAlignment.Left
     textBox.ClearTextOnFocus = if props.ClearTextOnFocus ~= nil then props.ClearTextOnFocus else false
     textBox.Parent = boxFrame
@@ -8231,6 +8469,7 @@ _MODULES['Elements/Keybind'] = function()
 
 local UserInputService = game:GetService("UserInputService")
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 
@@ -8238,8 +8477,9 @@ local Keybind = {}
 Keybind.__index = Keybind
 
 export type KeybindProps = {
-    Title: string,
-    Desc: string?,
+    Title: any,
+    Desc: any?,
+    Description: any?,
     Icon: string?,
     Value: (string | Enum.KeyCode)?,
     Flag: string?,
@@ -8248,7 +8488,7 @@ export type KeybindProps = {
 }
 
 function Keybind.new(parent: Instance, configEngine: any, props: any)
-    local titleText = props.Title or props.Name or "Keybind"
+    local titleText = Locale.Resolve(props.Title or props.Name or "Keybind")
     local rawVal = if props.Value ~= nil then props.Value elseif props.Default ~= nil then props.Default else nil
 
     local self = setmetatable({}, Keybind)
@@ -8260,7 +8500,8 @@ function Keybind.new(parent: Instance, configEngine: any, props: any)
     self._connections = {}
     self._listenConn = nil
     
-    local isDesc = props.Desc and props.Desc ~= ""
+    local descProp = props.Desc or props.Description
+    local isDesc = descProp and (if type(descProp) == "table" then true else descProp ~= "")
     local containerHeight = if isDesc then 54 else 42
     
     local container = Instance.new("Frame")
@@ -8304,10 +8545,9 @@ function Keybind.new(parent: Instance, configEngine: any, props: any)
     titleLabel.Size = UDim2.new(1, -iconOffset - 90, 0, 18)
     titleLabel.Position = UDim2.new(0, iconOffset, 0, if isDesc then 9 else 12)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Theme.Fonts.Header
-    titleLabel.Text = titleText
+    Theme.ApplyTypography(titleLabel, "Header", "Header")
+    Locale.Bind(titleLabel, "Text", props.Title or props.Name or "Keybind")
     titleLabel.TextColor3 = Theme.GetToken("TextPrimary")
-    titleLabel.TextSize = 13
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = container
@@ -8319,10 +8559,9 @@ function Keybind.new(parent: Instance, configEngine: any, props: any)
         descLabel.Size = UDim2.new(1, -iconOffset - 90, 0, 16)
         descLabel.Position = UDim2.new(0, iconOffset, 0, 29)
         descLabel.BackgroundTransparency = 1
-        descLabel.Font = Theme.Fonts.Body
-        descLabel.Text = props.Desc or ""
+        Theme.ApplyTypography(descLabel, "Sub", "Sub")
+        Locale.Bind(descLabel, "Text", descProp or "")
         descLabel.TextColor3 = Theme.GetToken("TextMuted")
-        descLabel.TextSize = 12
         descLabel.TextXAlignment = Enum.TextXAlignment.Left
         descLabel.TextTruncate = Enum.TextTruncate.AtEnd
         descLabel.Parent = container
@@ -8364,10 +8603,9 @@ function Keybind.new(parent: Instance, configEngine: any, props: any)
     badgeText.Size = UDim2.new(0, 0, 1, 0)
     badgeText.AutomaticSize = Enum.AutomaticSize.X
     badgeText.BackgroundTransparency = 1
-    badgeText.Font = Theme.Fonts.Code
+    Theme.ApplyTypography(badgeText, "Code", "Small")
     badgeText.Text = self.Value
     badgeText.TextColor3 = Theme.GetToken("TextPrimary")
-    badgeText.TextSize = 11
     badgeText.TextTruncate = Enum.TextTruncate.AtEnd
     badgeText.Parent = badge
     badge.Parent = container
@@ -8499,8 +8737,7 @@ function Keybind.new(parent: Instance, configEngine: any, props: any)
         
         local title = Instance.new("TextLabel")
         title.Text = "Select Key: " .. titleText
-        title.Font = Theme.Fonts.Title
-        title.TextSize = 13
+        Theme.ApplyTypography(title, "Title", "Header")
         title.TextColor3 = Theme.GetToken("TextPrimary")
         title.Size = UDim2.new(1, 0, 0, 20)
         title.BackgroundTransparency = 1
@@ -8528,8 +8765,7 @@ function Keybind.new(parent: Instance, configEngine: any, props: any)
             local keyBtn = Instance.new("TextButton")
             keyBtn.Name = "Key_" .. k
             keyBtn.Text = k
-            keyBtn.Font = Theme.Fonts.Code
-            keyBtn.TextSize = 11
+            Theme.ApplyTypography(keyBtn, "Code", "Small")
             keyBtn.TextColor3 = Theme.GetToken("TextPrimary")
             keyBtn.BackgroundColor3 = Theme.GetToken("SurfaceHover")
             keyBtn.AutoButtonColor = false
@@ -8683,6 +8919,7 @@ _MODULES['Elements/Paragraph'] = function()
 ]=]
 
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 
@@ -8690,21 +8927,22 @@ local Paragraph = {}
 Paragraph.__index = Paragraph
 
 export type ParagraphButton = {
-    Title: string,
+    Title: any,
     Icon: string?,
     Callback: (() -> ())?,
 }
 
 export type ParagraphProps = {
-    Title: string,
-    Desc: string,
+    Title: any,
+    Desc: any?,
+    Content: any?,
     Icon: string?,
     Buttons: { ParagraphButton }?,
 }
 
 function Paragraph.new(parent: Instance, props: any)
-    local titleText = props.Title or props.Name or "Paragraph"
-    local descText = props.Desc or props.Content or ""
+    local titleText = Locale.Resolve(props.Title or props.Name or "Paragraph")
+    local descProp = props.Desc or props.Content or ""
 
     local self = setmetatable({}, Paragraph)
     self._connections = {}
@@ -8765,10 +9003,9 @@ function Paragraph.new(parent: Instance, props: any)
     titleLabel.Size = UDim2.new(1, -iconOffset, 1, 0)
     titleLabel.Position = UDim2.new(0, iconOffset, 0, 0)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Theme.Fonts.Title
-    titleLabel.Text = titleText
+    Theme.ApplyTypography(titleLabel, "Title", "Header")
+    Locale.Bind(titleLabel, "Text", props.Title or props.Name or "Paragraph")
     titleLabel.TextColor3 = Theme.GetToken("TextPrimary")
-    titleLabel.TextSize = 13
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.RichText = true
     titleLabel.Parent = header
@@ -8778,10 +9015,9 @@ function Paragraph.new(parent: Instance, props: any)
     descLabel.Size = UDim2.new(1, 0, 0, 0)
     descLabel.AutomaticSize = Enum.AutomaticSize.Y
     descLabel.BackgroundTransparency = 1
-    descLabel.Font = Theme.Fonts.Body
-    descLabel.Text = descText
+    Theme.ApplyTypography(descLabel, "Body", "Sub")
+    Locale.Bind(descLabel, "Text", descProp)
     descLabel.TextColor3 = Theme.GetToken("TextMuted")
-    descLabel.TextSize = 12
     descLabel.TextWrapped = true
     descLabel.RichText = true
     descLabel.LineHeight = 1.2
@@ -8851,10 +9087,9 @@ function Paragraph.new(parent: Instance, props: any)
             btnLabel.Size = UDim2.new(1, -bOffset, 1, 0)
             btnLabel.Position = UDim2.new(0, bOffset, 0, 0)
             btnLabel.BackgroundTransparency = 1
-            btnLabel.Font = Theme.Fonts.Header
+            Theme.ApplyTypography(btnLabel, "Header", "Small")
             btnLabel.Text = bData.Title
             btnLabel.TextColor3 = Theme.GetToken("TextPrimary")
-            btnLabel.TextSize = 11
             btnLabel.TextXAlignment = Enum.TextXAlignment.Center
             btnLabel.Parent = btn
             
@@ -8916,6 +9151,7 @@ _MODULES['Components/Section'] = function()
 ]=]
 
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 local Primitives = _require("Components/Primitives")
@@ -8925,8 +9161,8 @@ local Section = {}
 Section.__index = Section
 
 export type SectionProps = {
-    Title: string,
-    Desc: string?,
+    Title: any,
+    Desc: any?,
     Icon: string?,
     Collapsible: boolean?,
     Opened: boolean?,
@@ -8939,12 +9175,12 @@ function Section.new(parent: Instance, configEngine: any, rawProps: any)
     props.Title = sectionTitle
     
     local self = setmetatable({}, Section)
-    self.Title = sectionTitle
+    self.Title = Locale.Resolve(sectionTitle)
     self.ConfigEngine = configEngine
     self.Opened = if props.Opened ~= nil then props.Opened else true
     
     local card = Instance.new("Frame")
-    card.Name = "Section_" .. tostring(sectionTitle)
+    card.Name = "Section_" .. Locale.Resolve(sectionTitle)
     card.Size = UDim2.new(1, 0, 0, 0)
     card.AutomaticSize = Enum.AutomaticSize.Y
     card.BackgroundColor3 = Theme.GetToken("Card")
@@ -9005,10 +9241,9 @@ function Section.new(parent: Instance, configEngine: any, rawProps: any)
     title.Size = UDim2.new(1, -offsetIcon - 30, 1, 0)
     title.Position = UDim2.new(0, offsetIcon, 0, 0)
     title.BackgroundTransparency = 1
-    title.Font = Theme.Fonts.Title
-    title.Text = props.Title
+    Theme.ApplyTypography(title, "Title", "Header")
+    Locale.Bind(title, "Text", props.Title)
     title.TextColor3 = Theme.GetToken("TextPrimary")
-    title.TextSize = 13
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = header
     Theme.Bind(title, "TextColor3", "TextPrimary")
@@ -9153,6 +9388,7 @@ _MODULES['Components/Tab'] = function()
 
 local UserInputService = game:GetService("UserInputService")
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 local Section = _require("Components/Section")
@@ -9183,7 +9419,7 @@ function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance,
     
     -- Sidebar Item Button
     local sidebarBtn = Instance.new("TextButton")
-    sidebarBtn.Name = "TabBtn_" .. tostring(tabTitle)
+    sidebarBtn.Name = "TabBtn_" .. Locale.Resolve(tabTitle)
     sidebarBtn.Size = UDim2.new(1, 0, 0, 36)
     sidebarBtn.BackgroundColor3 = Theme.GetToken("Card")
     sidebarBtn.BackgroundTransparency = 1
@@ -9226,10 +9462,9 @@ function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance,
     titleLabel.Size = UDim2.new(1, -iconOffset, 1, 0)
     titleLabel.Position = UDim2.new(0, iconOffset, 0, 0)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Theme.Fonts.Header
-    titleLabel.Text = props.Title
+    Theme.ApplyTypography(titleLabel, "Header", "Header")
+    Locale.Bind(titleLabel, "Text", props.Title)
     titleLabel.TextColor3 = Theme.GetToken("TextMuted")
-    titleLabel.TextSize = 13
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
     titleLabel.Parent = sidebarBtn
@@ -9241,7 +9476,7 @@ function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance,
     
     -- Page Wrapper (CanvasGroup for hardware-accelerated cross-fade & displacement)
     local pageWrapper = Instance.new("CanvasGroup")
-    pageWrapper.Name = "PageWrapper_" .. props.Title
+    pageWrapper.Name = "PageWrapper_" .. Locale.Resolve(props.Title)
     pageWrapper.Size = UDim2.fromScale(1, 1)
     pageWrapper.Position = UDim2.new(0, 0, 0, 0)
     pageWrapper.BackgroundTransparency = 1
@@ -9253,7 +9488,7 @@ function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance,
 
     -- Content Page Frame (ScrollingFrame)
     local page = Instance.new("ScrollingFrame")
-    page.Name = "Page_" .. props.Title
+    page.Name = "Page_" .. Locale.Resolve(props.Title)
     page.Size = UDim2.fromScale(1, 1)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
@@ -9633,6 +9868,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Tweener = _require("Core/Tweener")
 local Icons = _require("Core/Icons")
 local Tab = _require("Components/Tab")
@@ -9653,6 +9889,18 @@ export type WindowProps = {
     SideBarWidth: number?,
     ToggleKey: Enum.KeyCode?,
     HideSearchBar: boolean?,
+    DiscordLink: string?,
+    Icons: {
+        Discord: string?,
+        Theme: string?,
+        Profile: string?,
+        Language: string?,
+    }?,
+    Language: {
+        Default: string?,
+        Languages: { string }?,
+        Callback: ((lang: string) -> ())?,
+    }?,
     User: {
         Enabled: boolean?,
         Anonymous: boolean?,
@@ -9800,15 +10048,21 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
     local logoAsset = props.Logo or props.Icon
     local resolvedLogoImage = ""
     if logoAsset and logoAsset ~= "" then
-        local icon = Instance.new("ImageLabel")
-        icon.Name = "WindowIcon"
-        icon.Size = UDim2.fromOffset(28, 28)
-        icon.BackgroundTransparency = 1
-        icon.LayoutOrder = 1
-        icon.ZIndex = 4
-        Icons.ApplyAsset(icon, logoAsset)
-        icon.Parent = titleContainer
-        resolvedLogoImage = icon.Image
+        if typeof(logoAsset) == "Instance" then
+            if logoAsset:IsA("ImageLabel") or logoAsset:IsA("ImageButton") or logoAsset:IsA("Decal") or logoAsset:IsA("Texture") then
+                resolvedLogoImage = tostring((logoAsset :: any).Image)
+            end
+        elseif type(logoAsset) == "string" then
+            local icon = Instance.new("ImageLabel")
+            icon.Name = "WindowIcon"
+            icon.Size = UDim2.fromOffset(28, 28)
+            icon.BackgroundTransparency = 1
+            icon.LayoutOrder = 1
+            icon.ZIndex = 4
+            Icons.ApplyAsset(icon, logoAsset)
+            icon.Parent = titleContainer
+            resolvedLogoImage = tostring(icon.Image)
+        end
     end
     self.ResolvedLogo = resolvedLogoImage
     
@@ -9817,10 +10071,9 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
     titleLabel.Size = UDim2.new(0, 0, 1, 0)
     titleLabel.AutomaticSize = Enum.AutomaticSize.X
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Theme.Fonts.Title
+    Theme.ApplyTypography(titleLabel, "Title", "Title")
     titleLabel.Text = windowTitle
     titleLabel.TextColor3 = Theme.GetToken("TextPrimary")
-    titleLabel.TextSize = 14
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.LayoutOrder = 2
     titleLabel.ZIndex = 4
@@ -9901,10 +10154,9 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         badgeText.Size = UDim2.new(0, 0, 1, 0)
         badgeText.AutomaticSize = Enum.AutomaticSize.X
         badgeText.BackgroundTransparency = 1
-        badgeText.Font = Theme.Fonts.Title
+        Theme.ApplyTypography(badgeText, "Title", "Small")
         badgeText.Text = tagTitle
         badgeText.TextColor3 = tagColor
-        badgeText.TextSize = 10
         badgeText.TextXAlignment = Enum.TextXAlignment.Center
         badgeText.ZIndex = 5
         badgeText.Parent = tagBadge
@@ -9997,10 +10249,9 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
     keyText.Size = UDim2.new(0, 0, 1, 0)
     keyText.AutomaticSize = Enum.AutomaticSize.X
     keyText.BackgroundTransparency = 1
-    keyText.Font = Theme.Fonts.Title
+    Theme.ApplyTypography(keyText, "Title", "Small")
     keyText.Text = ""
     keyText.TextColor3 = Theme.GetToken("Success")
-    keyText.TextSize = 10
     keyText.TextXAlignment = Enum.TextXAlignment.Center
     keyText.ZIndex = 5
     keyText.Parent = tagKeyBadge
@@ -10017,7 +10268,68 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         return math.floor(tick())
     end
 
+    local function parseSafeExpiry(expires: any, now: number): (any, number?)
+        if expires == nil then return nil, nil end
+        if type(expires) == "number" then
+            if expires < 100000000 then
+                return now + expires, expires
+            else
+                return expires, math.max(0, expires - now)
+            end
+        end
+        if type(expires) == "string" then
+            local trimmed = expires:gsub("^%s+", ""):gsub("%s+$", "")
+            local lower = trimmed:lower()
+            if lower == "lifetime" or lower == "permanent" or lower == "inf" or lower == "forever" then
+                return "Lifetime", nil
+            end
+            local num = tonumber(trimmed)
+            if num then
+                if num < 100000000 then
+                    return now + num, num
+                else
+                    return num, math.max(0, num - now)
+                end
+            end
+            -- Parse duration shorthand: e.g. "24h", "12h", "1d", "7d", "30m"
+            local val, unit = string.match(trimmed, "^(%d+)%s*([dhmsDHMS])")
+            if val and unit then
+                local n = tonumber(val) or 0
+                unit = unit:lower()
+                local secs = 0
+                if unit == "d" then secs = n * 86400
+                elseif unit == "h" then secs = n * 3600
+                elseif unit == "m" then secs = n * 60
+                elseif unit == "s" then secs = n
+                end
+                return now + secs, secs
+            end
+            -- Parse ISO 8601 date strings: YYYY-MM-DDTHH:MM:SS
+            local y, m, d, hr, mn, sc = string.match(trimmed, "^(%d%d%d%d)%-(%d%d)%-(%d%d)[T ](%d%d):(%d%d):(%d%d)")
+            if y and m and d and hr and mn and sc then
+                local ts = os.time({
+                    year = tonumber(y) or 1970,
+                    month = tonumber(m) or 1,
+                    day = tonumber(d) or 1,
+                    hour = tonumber(hr) or 0,
+                    min = tonumber(mn) or 0,
+                    sec = tonumber(sc) or 0,
+                })
+                if ts and ts > 1000000000 then
+                    return ts, math.max(0, ts - now)
+                end
+            end
+        end
+        return expires, nil
+    end
+
     local function formatRemainingTime(seconds: number): string
+        if seconds >= 86400 then
+            local days = math.floor(seconds / 86400)
+            local hours = math.floor((seconds % 86400) / 3600)
+            local mins = math.floor((seconds % 3600) / 60)
+            return string.format("%dd %02dh %02dm", days, hours, mins)
+        end
         local hours = math.floor(seconds / 3600)
         local mins = math.floor((seconds % 3600) / 60)
         local secs = seconds % 60
@@ -10045,25 +10357,54 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
                     tagKeyBadge.Visible = false
                 else
                     tagKeyBadge.Visible = true
-                    if type(keyExp) == "string" and (keyExp:lower() == "lifetime" or keyExp:lower() == "permanent") then
-                        keyText.Text = "Lifetime"
-                        applyTagKeyTheme(Theme.GetToken("Accent"), "key")
+                    local prefix = self._tagKeyTitle
+                    local hasCustomTitle = prefix and prefix ~= "" and prefix:upper() ~= "KEY"
+                    
+                    if type(keyExp) == "string" and (keyExp:lower() == "lifetime" or keyExp:lower() == "permanent" or keyExp:lower() == "forever" or keyExp:lower() == "inf") then
+                        if hasCustomTitle then
+                            local upperPrefix = prefix:upper()
+                            if upperPrefix == "PREMIUM" then
+                                keyText.Text = "PREMIUM"
+                                applyTagKeyTheme(self._tagKeyColor or Theme.GetToken("Accent"), self._tagKeyIcon or "key")
+                            elseif upperPrefix == "NORMAL" then
+                                keyText.Text = "NORMAL • Lifetime"
+                                applyTagKeyTheme(self._tagKeyColor or Color3.fromRGB(16, 185, 129), self._tagKeyIcon or "shield")
+                            elseif upperPrefix == "FREE" or upperPrefix == "KEYLESS" then
+                                keyText.Text = prefix .. " • Lifetime"
+                                applyTagKeyTheme(self._tagKeyColor or Color3.fromRGB(6, 182, 212), self._tagKeyIcon or "unlock")
+                            elseif upperPrefix == "LIFETIME" then
+                                keyText.Text = "Lifetime"
+                                applyTagKeyTheme(self._tagKeyColor or Theme.GetToken("Accent"), self._tagKeyIcon or "key")
+                            else
+                                keyText.Text = prefix .. " • Lifetime"
+                                applyTagKeyTheme(self._tagKeyColor or Theme.GetToken("Accent"), self._tagKeyIcon or "key")
+                            end
+                        else
+                            keyText.Text = "Lifetime"
+                            applyTagKeyTheme(self._tagKeyColor or Theme.GetToken("Accent"), self._tagKeyIcon or "key")
+                        end
                     else
                         local targetTime = tonumber(keyExp) or 0
                         local now = getSafeTimestamp()
                         local remaining = math.max(0, targetTime - now)
                         if remaining <= 0 then
-                            keyText.Text = "Expired"
-                            applyTagKeyTheme(Theme.GetToken("Danger"), "clock")
+                            keyText.Text = if hasCustomTitle then (prefix .. " • Expired") else "Expired"
+                            applyTagKeyTheme(self._tagKeyColor or Theme.GetToken("Danger"), self._tagKeyIcon or "alert-circle")
                         else
                             local timeStr = formatRemainingTime(remaining)
-                            keyText.Text = timeStr
-                            if remaining > 3600 then
-                                applyTagKeyTheme(Theme.GetToken("Success"), "clock")
-                            elseif remaining > 600 then
-                                applyTagKeyTheme(Color3.fromRGB(245, 158, 11), "clock")
+                            if hasCustomTitle then
+                                keyText.Text = prefix .. " • " .. timeStr
                             else
-                                applyTagKeyTheme(Theme.GetToken("Danger"), "clock")
+                                keyText.Text = timeStr
+                            end
+                            if self._tagKeyColor then
+                                applyTagKeyTheme(self._tagKeyColor, self._tagKeyIcon or "clock")
+                            elseif remaining > 3600 then
+                                applyTagKeyTheme(Color3.fromRGB(16, 185, 129), self._tagKeyIcon or "clock")
+                            elseif remaining > 600 then
+                                applyTagKeyTheme(Color3.fromRGB(245, 158, 11), self._tagKeyIcon or "clock")
+                            else
+                                applyTagKeyTheme(Theme.GetToken("Danger"), self._tagKeyIcon or "clock")
                             end
                         end
                     end
@@ -10074,32 +10415,61 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
     end
 
     function self:SetKeyExpiry(expires: any)
-        if type(expires) == "number" and expires < 100000000 then
-            self._keyExpires = getSafeTimestamp() + expires
-        else
-            self._keyExpires = expires
-        end
+        local now = getSafeTimestamp()
+        local parsed, _ = parseSafeExpiry(expires, now)
+        self._keyExpires = parsed
         startExpiryWorker()
     end
 
     function self:TagKey(tagKeyProps: any)
         if not tagKeyProps then
             tagKeyBadge.Visible = false
+            self._keyExpires = nil
+            self._tagKeyTitle = nil
             return
         end
         if type(tagKeyProps) == "string" then
-            tagKeyBadge.Visible = true
-            keyText.Text = tagKeyProps
-            applyTagKeyTheme(Theme.GetToken("Accent"), "key")
-        elseif type(tagKeyProps) == "table" then
-            tagKeyBadge.Visible = true
-            if tagKeyProps.Expiry then
-                self:SetKeyExpiry(tagKeyProps.Expiry)
+            local str = tagKeyProps
+            if str:lower() == "lifetime" or str:lower() == "permanent" then
+                self._tagKeyTitle = nil
+                self:SetKeyExpiry("Lifetime")
             else
-                if tagKeyProps.Title then keyText.Text = tagKeyProps.Title end
-                if tagKeyProps.Color then applyTagKeyTheme(tagKeyProps.Color, tagKeyProps.Icon or "key") end
-                if tagKeyProps.Icon and not tagKeyProps.Color then Icons.Apply(keyIcon, tagKeyProps.Icon) end
+                self._tagKeyTitle = str
+                self:SetKeyExpiry("Lifetime")
             end
+            return
+        end
+        if type(tagKeyProps) == "table" then
+            tagKeyBadge.Visible = true
+            
+            -- Detect key name characteristics if provided
+            local keyString = tagKeyProps.Key or tagKeyProps.key or ""
+            local isKeyNormal = keyString ~= "" and (keyString:upper():find("NORMAL") ~= nil or keyString:upper():find("FREE") ~= nil)
+            local isKeyPremium = keyString ~= "" and (keyString:upper():find("PREMIUM") ~= nil)
+            
+            local isPrem = tagKeyProps.is_premium
+            if isPrem == nil then isPrem = tagKeyProps.IsPremium end
+            if isPrem == nil and isKeyPremium then isPrem = true end
+            if isPrem == nil and isKeyNormal then isPrem = false end
+            
+            local title = tagKeyProps.Title or tagKeyProps.title or tagKeyProps.Plan or tagKeyProps.plan
+            if not title or title == "" or title:upper() == "KEY" then
+                if isPrem == true then
+                    title = "PREMIUM"
+                elseif isPrem == false then
+                    title = if isKeyNormal then "NORMAL" else "FREE"
+                end
+            end
+            self._tagKeyTitle = title
+            self._tagKeyColor = tagKeyProps.Color or tagKeyProps.color
+            self._tagKeyIcon = tagKeyProps.Icon or tagKeyProps.icon
+            
+            local expiry = tagKeyProps.Expiry or tagKeyProps.expiry or tagKeyProps.KeyExpires or tagKeyProps.expires_at or tagKeyProps.ExpiresAt
+            if expiry == nil or expiry == "" or expiry == "null" then
+                expiry = "Lifetime"
+            end
+            
+            self:SetKeyExpiry(expiry)
         end
     end
 
@@ -10117,10 +10487,9 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         authorLabel.Size = UDim2.new(0, 0, 1, 0)
         authorLabel.AutomaticSize = Enum.AutomaticSize.X
         authorLabel.BackgroundTransparency = 1
-        authorLabel.Font = Theme.Fonts.Body
+        Theme.ApplyTypography(authorLabel, "Body", "Sub")
         authorLabel.Text = props.Author
         authorLabel.TextColor3 = Theme.GetToken("Placeholder")
-        authorLabel.TextSize = 11
         authorLabel.TextXAlignment = Enum.TextXAlignment.Left
         authorLabel.LayoutOrder = 5
         authorLabel.ZIndex = 4
@@ -10306,12 +10675,11 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         searchBox.Size = UDim2.new(1, -34, 1, 0)
         searchBox.Position = UDim2.new(0, 30, 0, 0)
         searchBox.BackgroundTransparency = 1
-        searchBox.Font = Theme.Fonts.Body
-        searchBox.PlaceholderText = "Search tabs..."
+        Theme.ApplyTypography(searchBox, "Body", "Body")
+        Locale.Bind(searchBox, "PlaceholderText", { EN = "Search tabs...", TH = "ค้นหาแท็บ..." })
         searchBox.PlaceholderColor3 = Theme.GetToken("Placeholder")
         searchBox.Text = ""
         searchBox.TextColor3 = Theme.GetToken("TextPrimary")
-        searchBox.TextSize = 12
         searchBox.TextXAlignment = Enum.TextXAlignment.Left
         searchBox.ClearTextOnFocus = false
         searchBox.Parent = searchFrame
@@ -10349,6 +10717,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         sidebarTools.Parent = sidebarFooter
         
         local toolsLayout = Instance.new("UIListLayout")
+        toolsLayout.SortOrder = Enum.SortOrder.LayoutOrder
         toolsLayout.FillDirection = Enum.FillDirection.Horizontal
         toolsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
         toolsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
@@ -10364,12 +10733,14 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         local currentDiscordIcon = iconConfig.Discord or "send"
         local currentThemeIcon = iconConfig.Theme or "sun"
         local currentProfileIcon = iconConfig.Profile or "hat-glasses"
+        local currentLanguageIcon = iconConfig.Language or "languages"
         local isNameHidden = (props.User and props.User.Anonymous) or false
         local isWhiteMode = Theme.GetCurrentThemeName() == "WhiteMode"
 
         -- Button 1: Hide Name (Profile) (Square 32x32)
         local hideNameBtn = Instance.new("TextButton")
         hideNameBtn.Name = "HideNameButton"
+        hideNameBtn.LayoutOrder = 1
         hideNameBtn.Size = UDim2.fromOffset(32, 32)
         hideNameBtn.BackgroundColor3 = Theme.GetToken("Card")
         hideNameBtn.AutoButtonColor = false
@@ -10402,6 +10773,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         -- Button 2: WhiteMode Toggle (Theme) (Square 32x32)
         local themeToggleBtn = Instance.new("TextButton")
         themeToggleBtn.Name = "ThemeToggleButton"
+        themeToggleBtn.LayoutOrder = 2
         themeToggleBtn.Size = UDim2.fromOffset(32, 32)
         themeToggleBtn.BackgroundColor3 = Theme.GetToken("Card")
         themeToggleBtn.AutoButtonColor = false
@@ -10431,9 +10803,43 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         applyIconToLabel(themeToggleIcon, if isWhiteMode then "moon" else currentThemeIcon)
         themeToggleIcon.Parent = themeToggleBtn
 
-        -- Button 3: Discord Button (Square 32x32)
+        -- Button 3: Language Switcher Button (Square 32x32)
+        local languageBtn = Instance.new("TextButton")
+        languageBtn.Name = "LanguageButton"
+        languageBtn.LayoutOrder = 3
+        languageBtn.Size = UDim2.fromOffset(32, 32)
+        languageBtn.BackgroundColor3 = Theme.GetToken("Card")
+        languageBtn.AutoButtonColor = false
+        languageBtn.Text = ""
+        languageBtn.ZIndex = 5
+        languageBtn.Parent = sidebarTools
+        Theme.Bind(languageBtn, "BackgroundColor3", "Card")
+
+        local languageCorner = Instance.new("UICorner")
+        languageCorner.CornerRadius = Theme.Radii.Control
+        languageCorner.Parent = languageBtn
+
+        local languageStroke = Instance.new("UIStroke")
+        languageStroke.Color = Theme.GetToken("BorderSubtle")
+        languageStroke.Thickness = 1.2
+        languageStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        languageStroke.Parent = languageBtn
+
+        local languageIcon = Instance.new("ImageLabel")
+        languageIcon.Name = "Icon"
+        languageIcon.Size = UDim2.fromOffset(16, 16)
+        languageIcon.Position = UDim2.fromScale(0.5, 0.5)
+        languageIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+        languageIcon.BackgroundTransparency = 1
+        languageIcon.ImageColor3 = Theme.GetToken("TextMuted")
+        languageIcon.ZIndex = 6
+        applyIconToLabel(languageIcon, currentLanguageIcon)
+        languageIcon.Parent = languageBtn
+
+        -- Button 4: Discord Button (Square 32x32)
         local discordBtn = Instance.new("TextButton")
         discordBtn.Name = "DiscordButton"
+        discordBtn.LayoutOrder = 4
         discordBtn.Size = UDim2.fromOffset(32, 32)
         discordBtn.BackgroundColor3 = Theme.GetToken("Card")
         discordBtn.AutoButtonColor = false
@@ -10465,6 +10871,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         
         Tweener.BindPressFeedback(hideNameBtn, hideNameBtn, 0.9)
         Tweener.BindPressFeedback(themeToggleBtn, themeToggleBtn, 0.9)
+        Tweener.BindPressFeedback(languageBtn, languageBtn, 0.9)
         Tweener.BindPressFeedback(discordBtn, discordBtn, 0.9)
         
         local userCard = Instance.new("TextButton")
@@ -10496,8 +10903,10 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
             local muted = Theme.GetToken("TextMuted")
             Tweener.Tween(hideNameStroke, Tweener.Info.Fast, { Color = if isNameHidden then accent else subtle })
             Tweener.Tween(themeToggleStroke, Tweener.Info.Fast, { Color = if isWhiteMode then accent else subtle })
+            Tweener.Tween(languageStroke, Tweener.Info.Fast, { Color = subtle })
             Tweener.Tween(discordStroke, Tweener.Info.Fast, { Color = subtle })
             Tweener.Tween(userStroke, Tweener.Info.Fast, { Color = subtle })
+            Tweener.Tween(languageIcon, Tweener.Info.Fast, { ImageColor3 = muted })
             Tweener.Tween(discordIcon, Tweener.Info.Fast, { ImageColor3 = muted })
             if not isNameHidden then
                 Tweener.Tween(hideNameIcon, Tweener.Info.Fast, { ImageColor3 = muted })
@@ -10539,6 +10948,17 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
             end
         end)
 
+        languageBtn.MouseEnter:Connect(function()
+            Tweener.Tween(languageBtn, Tweener.Info.Fast, { BackgroundColor3 = Theme.GetToken("SurfaceHover") })
+            Tweener.Tween(languageStroke, Tweener.Info.Fast, { Color = Theme.GetToken("BorderAccent") })
+            Tweener.Tween(languageIcon, Tweener.Info.Fast, { ImageColor3 = Theme.GetToken("TextPrimary") })
+        end)
+        languageBtn.MouseLeave:Connect(function()
+            Tweener.Tween(languageBtn, Tweener.Info.Fast, { BackgroundColor3 = Theme.GetToken("Card") })
+            Tweener.Tween(languageStroke, Tweener.Info.Fast, { Color = Theme.GetToken("BorderSubtle") })
+            Tweener.Tween(languageIcon, Tweener.Info.Fast, { ImageColor3 = Theme.GetToken("TextMuted") })
+        end)
+
         discordBtn.MouseEnter:Connect(function()
             Tweener.Tween(discordBtn, Tweener.Info.Fast, { BackgroundColor3 = Theme.GetToken("SurfaceHover") })
             Tweener.Tween(discordStroke, Tweener.Info.Fast, { Color = Theme.GetToken("BorderAccent") })
@@ -10574,33 +10994,44 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         avatarCorner.Parent = avatarImg
         
         local playerThumbnail = ""
+        local function setAvatarImage(imgSource: any)
+            if typeof(imgSource) == "string" and imgSource ~= "" then
+                pcall(function()
+                    avatarImg.Image = imgSource
+                end)
+            end
+        end
+
         if lp then
             task.spawn(function()
-                local content, _ = Players:GetUserThumbnailAsync(
-                    lp.UserId,
-                    Enum.ThumbnailType.HeadShot,
-                    Enum.ThumbnailSize.Size100x100
-                )
+                local ok, content = pcall(function()
+                    return Players:GetUserThumbnailAsync(
+                        lp.UserId,
+                        Enum.ThumbnailType.HeadShot,
+                        Enum.ThumbnailSize.Size100x100
+                    )
+                end)
+                if not ok then return end
+                if type(content) ~= "string" or content == "" then return end
                 playerThumbnail = content
                 if not isNameHidden then
-                    avatarImg.Image = content
+                    setAvatarImage(content)
                 end
             end)
         end
         if isNameHidden and resolvedLogoImage ~= "" then
-            avatarImg.Image = resolvedLogoImage
+            setAvatarImage(resolvedLogoImage)
         end
         avatarImg.Parent = userCard
         
         local nameLabel = Instance.new("TextLabel")
         nameLabel.Name = "DisplayName"
-        nameLabel.Size = UDim2.new(1, -56, 0, 15)
-        nameLabel.Position = UDim2.new(0, 48, 0, 8)
+        nameLabel.Size = UDim2.new(1, -56, 0, 16)
+        nameLabel.Position = UDim2.new(0, 48, 0, 7)
         nameLabel.BackgroundTransparency = 1
-        nameLabel.Font = Theme.Fonts.Title
+        Theme.ApplyTypography(nameLabel, "Title", "Sub")
         nameLabel.Text = if isNameHidden then "Sodium" else (lp and lp.DisplayName or "User")
         nameLabel.TextColor3 = Theme.GetToken("TextPrimary")
-        nameLabel.TextSize = 12
         nameLabel.TextXAlignment = Enum.TextXAlignment.Left
         nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
         nameLabel.ZIndex = 6
@@ -10609,13 +11040,12 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
         
         local userLabel = Instance.new("TextLabel")
         userLabel.Name = "Username"
-        userLabel.Size = UDim2.new(1, -56, 0, 13)
+        userLabel.Size = UDim2.new(1, -56, 0, 14)
         userLabel.Position = UDim2.new(0, 48, 0, 24)
         userLabel.BackgroundTransparency = 1
-        userLabel.Font = Theme.Fonts.Sub
+        Theme.ApplyTypography(userLabel, "Sub", "Small")
         userLabel.Text = if isNameHidden then "sodiumuser@gmail.com" else (lp and "@" .. lp.Name or "@unknown")
         userLabel.TextColor3 = Theme.GetToken("Placeholder")
-        userLabel.TextSize = 10
         userLabel.TextXAlignment = Enum.TextXAlignment.Left
         userLabel.TextTruncate = Enum.TextTruncate.AtEnd
         userLabel.ZIndex = 6
@@ -10631,7 +11061,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
                 nameLabel.Text = "Sodium"
                 userLabel.Text = "sodiumuser@gmail.com"
                 if resolvedLogoImage ~= "" then
-                    avatarImg.Image = resolvedLogoImage
+                    setAvatarImage(resolvedLogoImage)
                 end
                 applyIconToLabel(hideNameIcon, currentProfileIcon)
                 Tweener.Tween(hideNameStroke, Tweener.Info.Fast, { Color = Theme.GetToken("Accent") })
@@ -10640,7 +11070,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
                 local localPlr = Players.LocalPlayer
                 nameLabel.Text = if localPlr then localPlr.DisplayName else "User"
                 userLabel.Text = if localPlr then "@" .. localPlr.Name else "@unknown"
-                avatarImg.Image = playerThumbnail
+                setAvatarImage(playerThumbnail)
                 applyIconToLabel(hideNameIcon, currentProfileIcon)
                 Tweener.Tween(hideNameStroke, Tweener.Info.Fast, { Color = Theme.GetToken("BorderSubtle") })
                 Tweener.Tween(hideNameIcon, Tweener.Info.Fast, { ImageColor3 = Theme.GetToken("TextMuted") })
@@ -10670,6 +11100,43 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
             end
         end)
 
+        -- Language Switcher Action
+        local langProps = props.Language or {}
+        local initialLang = langProps.Default or Locale.GetLanguage() or "EN"
+        Locale.SetLanguage(initialLang)
+
+        languageBtn.Activated:Connect(function()
+            local current = Locale.GetLanguage()
+            local nextLang = if current:upper() == "TH" then "EN" else "TH"
+            Locale.SetLanguage(nextLang)
+            
+            -- Smooth pulse feedback on icon
+            Tweener.Tween(languageIcon, Tweener.Info.Fast, { ImageColor3 = Theme.GetToken("Accent") })
+            task.delay(0.25, function()
+                Tweener.Tween(languageIcon, Tweener.Info.Fast, { ImageColor3 = Theme.GetToken("TextMuted") })
+            end)
+            
+            if nextLang == "TH" then
+                Notification.Notify(self.RootGui, {
+                    Title = "เปลี่ยนภาษา",
+                    Content = "เปลี่ยนภาษาเป็น ภาษาไทย (TH)",
+                    Icon = "languages",
+                    Duration = 2,
+                })
+            else
+                Notification.Notify(self.RootGui, {
+                    Title = "Language",
+                    Content = "Language set to English (EN)",
+                    Icon = "languages",
+                    Duration = 2,
+                })
+            end
+            
+            if langProps.Callback then
+                task.spawn(langProps.Callback, nextLang)
+            end
+        end)
+
         -- Discord Link Copy Action
         local discordInviteUrl = props.DiscordLink or "https://discord.gg/2gEjXyQWKM"
         discordBtn.Activated:Connect(function()
@@ -10688,8 +11155,8 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
             })
         end)
 
-        -- Table Config Method: Allows runtime custom icon configuration strictly for Discord, Theme, Profile buttons
-        function self:SetIconConfig(newConfig: { Discord: string?, Theme: string?, Profile: string? })
+        -- Table Config Method: Allows runtime custom icon configuration strictly for Discord, Theme, Profile, Language buttons
+        function self:SetIconConfig(newConfig: { Discord: string?, Theme: string?, Profile: string?, Language: string? })
             if type(newConfig) ~= "table" then return end
             if newConfig.Discord then
                 currentDiscordIcon = newConfig.Discord
@@ -10703,6 +11170,22 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
                 currentProfileIcon = newConfig.Profile
                 applyIconToLabel(hideNameIcon, if isNameHidden then "eye-off" else currentProfileIcon)
             end
+            if newConfig.Language then
+                currentLanguageIcon = newConfig.Language
+                applyIconToLabel(languageIcon, currentLanguageIcon)
+            end
+        end
+        
+        function self:SetLanguage(lang: string)
+            Locale.SetLanguage(lang)
+        end
+
+        function self:GetLanguage(): string
+            return Locale.GetLanguage()
+        end
+
+        function self:OnLanguageChanged(callback: (string) -> ())
+            return Locale.Changed:Connect(callback)
         end
         
         if props.User.Callback then
@@ -10861,8 +11344,7 @@ function Window.new(containerManager: any, configEngine: any, props: WindowProps
     minWidget.BackgroundTransparency = 0 -- 100% opaque to guarantee pure crisp white in White Mode
     minWidget.AutoButtonColor = false
     minWidget.Text = "Sodium Hub"
-    minWidget.Font = Theme.Fonts.Title
-    minWidget.TextSize = 13
+    Theme.ApplyTypography(minWidget, "Title", "Body")
     minWidget.TextColor3 = Theme.GetToken("TextPrimary")
     minWidget.Visible = true
     minWidget.ZIndex = 999999
@@ -12055,6 +12537,7 @@ _MODULES['Init'] = function()
 ]=]
 
 local Theme = _require("Core/Theme")
+local Locale = _require("Core/Locale")
 local Icons = _require("Core/Icons")
 local Signals = _require("Core/Signals")
 local Container = _require("Core/Container")
@@ -12069,6 +12552,7 @@ local KeyCheck = _require("Components/KeyCheck")
 local SodiumUI = {
     Version = "1.0.0",
     Theme = Theme,
+    Locale = Locale,
     Icons = Icons,
     Signals = Signals,
 }
@@ -12100,6 +12584,14 @@ end
 
 function SodiumUI:SetTheme(name: string)
     Theme.SetTheme(name)
+end
+
+function SodiumUI:SetLanguage(lang: string)
+    Locale.SetLanguage(lang)
+end
+
+function SodiumUI:GetLanguage(): string
+    return Locale.GetLanguage()
 end
 
 function SodiumUI:Notify(props: any)
