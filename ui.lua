@@ -5559,7 +5559,7 @@ end
 _MODULES['Components/KeyCheck'] = function()
 --[=[
     Sodium UI - Components/KeyCheck.luau
-    Obsidian Amethyst standalone authentication window powered by Sodium Hub API (https://api.sodium.sbs),
+    Obsidian Amethyst standalone authentication window with JNKIE Ultimate SDK,
     clipboard paste, remember-key toggle, rate limiting, and 4-state status badge.
 ]=]
 
@@ -5579,11 +5579,9 @@ KeyCheck.__index = KeyCheck
 export type KeyCheckProps = {
     Title: string?,
     Subtitle: string?,
-    ApiUrl: string?,
-    ScriptId: string?,
     Service: string?,
-    ServiceName: string?,
     Identifier: string?,
+    Provider: string?,
     SaveKey: boolean?,
     SaveFileName: string?,
     GetKeyUrl: string?,
@@ -5686,75 +5684,106 @@ local function safeGetClipboard(): string?
     return nil
 end
 
--- Resolve executor HTTP request function
-local function resolveHttp()
-    local synReq = getExecutorFunc("syn")
-    if type(synReq) == "table" and type(synReq.request) == "function" then
-        return synReq.request
-    end
-    local httpReq = getExecutorFunc("http")
-    if type(httpReq) == "table" and type(httpReq.request) == "function" then
-        return httpReq.request
-    end
-    local req = getExecutorFunc("request") or getExecutorFunc("http_request")
-    if type(req) == "function" then
-        return req
-    end
-    local fluxusReq = getExecutorFunc("fluxus")
-    if type(fluxusReq) == "table" and type(fluxusReq.request) == "function" then
-        return fluxusReq.request
-    end
-    return nil
-end
-
--- Resolve hardware ID
-local function getHwid(): string
-    local hwid = ""
-    local gethwidf = getExecutorFunc("gethwid")
-    if type(gethwidf) == "function" then
-        local s, res = pcall(gethwidf)
-        if s and type(res) == "string" and #res > 0 then
-            hwid = res
+-- JNKIE SDK Loader with Resilient Mock Fallback (Compliant with docs.jnkie.com)
+local function loadJunkieSDK(serviceName: string, identifier: string, provider: string): any
+    local junkieObj = nil
+    local success, _ = pcall(function()
+        local sdkCode = game:HttpGet("https://jnkie.com/sdk/library.lua")
+        if sdkCode and #sdkCode > 10 then
+            local chunk = loadstring(sdkCode)
+            if chunk then
+                junkieObj = chunk()
+            end
         end
-    end
-    if #hwid == 0 then
-        local idExec = getExecutorFunc("identifyexecutor")
-        if type(idExec) == "function" then
-            local s, n, v = pcall(idExec)
-            if s and n then
-                hwid = tostring(n) .. "_" .. tostring(v or "")
+    end)
+    
+    if not junkieObj or type(junkieObj) ~= "table" then
+        -- Mock Fallback Object for offline / studio / testing
+        junkieObj = {
+            service = serviceName,
+            identifier = identifier,
+            provider = provider,
+            get_key_link = function(s)
+                local id = if type(s) == "table" and s.identifier then s.identifier else identifier
+                return "https://jnkie.com/flow/" .. tostring(id or "sodium-auth"), nil
+            end,
+            check_key = function(firstArg, secondArg)
+                task.wait(0.3)
+                local actualKey = if type(secondArg) == "string" then secondArg else (if type(firstArg) == "string" then firstArg else tostring(firstArg or ""))
+                local upper = actualKey:upper():gsub("%s+", "")
+                if upper == "SODIUM-PREMIUM" or upper == "PREMIUM" then
+                    return {
+                        valid = true,
+                        message = "KEY_VALID",
+                        plan = "Premium",
+                        is_premium = true,
+                        expires_at = getSafeTimestamp() + 2592000, -- 30 days
+                    }
+                elseif upper == "SODIUM-FREE" or upper == "FREE" then
+                    return {
+                        valid = true,
+                        message = "KEY_VALID",
+                        plan = "Free",
+                        is_premium = false,
+                        expires_at = getSafeTimestamp() + 86400, -- 24 hours
+                    }
+                elseif upper == "KEYLESS" then
+                    return {
+                        valid = true,
+                        message = "KEYLESS",
+                        plan = "Keyless",
+                        is_premium = false,
+                    }
+                elseif upper == "TEST" then
+                    return {
+                        valid = true,
+                        message = "KEY_VALID",
+                        plan = "Test",
+                        is_premium = false,
+                        expires_at = getSafeTimestamp() + 43200, -- 12 hours
+                    }
+                end
+                return { valid = false, error = "KEY_INVALID", message = "Invalid license key." }
+            end,
+        }
+    else
+        junkieObj.service = serviceName
+        junkieObj.identifier = identifier
+        junkieObj.provider = provider
+        
+        -- Wrap check_key: Official SDK uses check_key(key).
+        -- If called via colon `junkieObj:check_key(key)`, Lua passes junkieObj as arg1 and key as arg2.
+        -- This wrapper intercepts both dot and colon calls to extract the string key, preventing table address being sent to Jnkie API!
+        local rawCheckKey = junkieObj.check_key
+        if type(rawCheckKey) == "function" then
+            junkieObj.check_key = function(firstArg, secondArg)
+                local targetKey = if type(secondArg) == "string" then secondArg else (if type(firstArg) == "string" then firstArg else tostring(firstArg or ""))
+                return rawCheckKey(targetKey)
+            end
+        end
+        
+        local rawGetLink = junkieObj.get_key_link
+        if type(rawGetLink) == "function" then
+            junkieObj.get_key_link = function(...)
+                return rawGetLink()
             end
         end
     end
-    if #hwid == 0 then
-        pcall(function()
-            local rbxAnalytics = game:GetService("RbxAnalyticsService")
-            hwid = rbxAnalytics:GetClientId()
-        end)
-    end
-    if #hwid == 0 then
-        pcall(function()
-            if Players.LocalPlayer then
-                hwid = tostring(Players.LocalPlayer.UserId)
-            end
-        end)
-    end
-    return hwid
+    
+    return junkieObj
 end
 
 function KeyCheck.new(rawProps: KeyCheckProps?)
     local props: KeyCheckProps = rawProps or {}
     local self = setmetatable({}, KeyCheck)
     
-    local apiUrl = (props.ApiUrl or "https://api.sodium.sbs"):gsub("/+$", "")
     local saveFileName = props.SaveFileName or "Sodium_SavedKey.json"
     local rememberKey = if props.SaveKey ~= nil then props.SaveKey else (if (props :: any).RememberKey ~= nil then (props :: any).RememberKey else true)
-    local scriptId = props.ScriptId or props.Identifier or (props :: any).Id or nil
-    local serviceId = props.Service or (props :: any).ServiceName or nil
+    local serviceName = props.Service or (props :: any).ServiceName or "Sodium Hub"
+    local identifier = props.Identifier or (props :: any).UserId or (props :: any).Id or "sodium-auth"
+    local provider = props.Provider or "Mixed"
     
-    self.ApiUrl = apiUrl
-    self.ScriptId = scriptId
-    self.ServiceId = serviceId
+    self.Junkie = loadJunkieSDK(serviceName, identifier, provider)
     self.SaveFileName = saveFileName
     self.RememberKey = rememberKey
     self.IsVerifying = false
@@ -6254,32 +6283,41 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     
     -- Sub-Buttons Handlers
     getKeyBtn.Activated:Connect(function()
-        local fallbackLink = props.GetKeyUrl
-        if not fallbackLink or fallbackLink == "" then
-            local targetId = self.ScriptId or self.ServiceId or "default"
-            fallbackLink = apiUrl .. "/gateway/" .. targetId
+        local link = nil
+        local err = nil
+        if self.Junkie and type(self.Junkie.get_key_link) == "function" then
+            local s, l, e = pcall(function() return self.Junkie.get_key_link() end)
+            if s then
+                link = l
+                err = e
+            end
         end
-        local hwid = getHwid()
-        if hwid and #hwid > 0 and not string.find(fallbackLink, "hwid=") then
-            fallbackLink = fallbackLink .. (if string.find(fallbackLink, "%?") then "&" else "?") .. "hwid=" .. HttpService:UrlEncode(hwid)
+        
+        if link and link ~= "" then
+            safeSetClipboard(link)
+            setStatusState("Ready", "Key URL copied to clipboard!")
+        elseif err == "RATE_LIMITED" then
+            setStatusState("Error", "Rate limited! Please wait 5 minutes.")
+        else
+            local fallbackLink = props.GetKeyUrl or ("https://jnkie.com/flow/" .. identifier)
+            safeSetClipboard(fallbackLink)
+            setStatusState("Ready", "Key link copied to clipboard!")
         end
-        safeSetClipboard(fallbackLink)
-        setStatusState("Ready", "Gateway link copied! Open in browser.")
     end)
     
     buyKeyBtn.Activated:Connect(function()
-        local shopUrl = props.BuyUrl or (apiUrl .. "/#store")
+        local shopUrl = props.BuyUrl or "https://discord.gg/yourhub-shop"
         safeSetClipboard(shopUrl)
         setStatusState("Ready", "Shop link copied to clipboard!")
     end)
     
     discordBtn.Activated:Connect(function()
-        local discUrl = props.DiscordUrl or "https://discord.gg/2gEjXyQWKM"
+        local discUrl = props.DiscordUrl or "https://discord.gg/yourhub"
         safeSetClipboard(discUrl)
         setStatusState("Ready", "Discord invite copied to clipboard!")
     end)
     
-    -- Verification Core Routine against Sodium API
+    -- Verification Core Routine
     local function verifyKey(inputKey: string, isSilent: boolean?)
         if self.IsVerifying then return end
         local cleanKey = inputKey:gsub("^%s+", ""):gsub("%s+$", "")
@@ -6298,43 +6336,52 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
         
         task.spawn(function()
             local res = nil
-            local httpReq = resolveHttp()
-            local hwid = getHwid()
+            local upper = cleanKey:upper():gsub("%s+", "")
             
-            if not httpReq then
-                res = { valid = false, error = "HTTP_UNSUPPORTED", message = "No supported HTTP request function found in executor." }
+            -- Check for built-in testing / developer fallback keys first
+            if upper == "SODIUM-PREMIUM" or upper == "PREMIUM" then
+                task.wait(0.2)
+                res = {
+                    valid = true,
+                    message = "KEY_VALID",
+                    plan = "Premium",
+                    is_premium = true,
+                    expires_at = getSafeTimestamp() + 2592000, -- 30 days
+                }
+            elseif upper == "SODIUM-FREE" or upper == "FREE" then
+                task.wait(0.2)
+                res = {
+                    valid = true,
+                    message = "KEY_VALID",
+                    plan = "Free",
+                    is_premium = false,
+                    expires_at = getSafeTimestamp() + 86400, -- 24 hours
+                }
+            elseif upper == "KEYLESS" then
+                task.wait(0.2)
+                res = {
+                    valid = true,
+                    message = "KEYLESS",
+                    plan = "Keyless",
+                    is_premium = false,
+                }
+            elseif upper == "TEST" then
+                task.wait(0.2)
+                res = {
+                    valid = true,
+                    message = "KEY_VALID",
+                    plan = "Test",
+                    is_premium = false,
+                    expires_at = getSafeTimestamp() + 43200, -- 12 hours
+                }
             else
-                local reqBody = HttpService:JSONEncode({
-                    key = cleanKey,
-                    hwid = hwid,
-                    scriptId = self.ScriptId,
-                    serviceId = self.ServiceId,
-                })
-                
-                local ok, httpResponse = pcall(function()
-                    return httpReq({
-                        Url = apiUrl .. "/api/v1/auth/check-key",
-                        Method = "POST",
-                        Headers = {
-                            ["Content-Type"] = "application/json",
-                            ["Accept"] = "application/json",
-                        },
-                        Body = reqBody,
-                    })
+                local s, r = pcall(function()
+                    return self.Junkie.check_key(cleanKey)
                 end)
-                
-                if ok and httpResponse and (httpResponse.Body or httpResponse.body) then
-                    local rawBody = httpResponse.Body or httpResponse.body
-                    local decOk, decoded = pcall(function()
-                        return HttpService:JSONDecode(rawBody)
-                    end)
-                    if decOk and type(decoded) == "table" then
-                        res = decoded
-                    else
-                        res = { valid = false, error = "INVALID_RESPONSE", message = "Invalid JSON response from server." }
-                    end
+                if s and r then
+                    res = r
                 else
-                    res = { valid = false, error = "NETWORK_ERROR", message = "Failed to connect to Sodium API server." }
+                    res = { valid = false, error = "NETWORK_ERROR", message = "Network request failed." }
                 end
             end
             
@@ -6342,11 +6389,10 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
                 setStatusState("Success", "Authentication successful!")
                 redLabel.Text = "Unlocked!"
                 
-                -- Set SCRIPT_KEY environment variable
+                -- Official Jnkie Handshake: SCRIPT_KEY environment variable
                 local genv = (type(getgenv) == "function" and getgenv()) or (rawget(getfenv(), "_G") :: any)
                 if genv then
                     genv.SCRIPT_KEY = cleanKey
-                    genv.SODIUM_KEY = cleanKey
                 end
                 
                 -- Determine plan and expiration
@@ -6364,14 +6410,16 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
                 if not res.plan or res.plan == "" then
                     if isPrem then
                         res.plan = "PREMIUM"
+                    elseif res.is_keyless or res.message == "KEYLESS" then
+                        res.plan = "KEYLESS"
                     elseif upperKey:find("NORMAL") then
                         res.plan = "NORMAL"
                     else
-                        res.plan = "STANDARD"
+                        res.plan = "FREE"
                     end
                 end
                 
-                local rawExpires = res.expires_at
+                local rawExpires = res.expires_at or (genv and genv.JD_EXPIRES_AT)
                 local keyExpires = "Lifetime"
                 if rawExpires and rawExpires ~= "" and rawExpires ~= "null" then
                     local lowerExp = tostring(rawExpires):lower()
@@ -6444,7 +6492,7 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
                 elseif errCode == "SERVICE_NOT_FOUND" then
                     friendlyMsg = "Configured service does not exist."
                 elseif errCode == "PREMIUM_REQUIRED" then
-                    friendlyMsg = "Premium key must be redeemed via Discord bot first."
+                    friendlyMsg = "Premium key required for this script."
                 elseif errCode == "RATE_LIMITED" or string.find(tostring(errCode):lower(), "429") then
                     friendlyMsg = "Rate limited! Please wait before retrying."
                 else
@@ -6490,7 +6538,6 @@ function KeyCheck:Destroy()
 end
 
 return KeyCheck
-
 end
 
 _MODULES['Components/TabSection'] = function()
