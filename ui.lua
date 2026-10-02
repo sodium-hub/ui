@@ -8099,12 +8099,64 @@ export type DropdownProps = {
     Callback: ((selected: any) -> ())?,
 }
 
+local function normalizeValues(raw: any): { any }
+    if type(raw) ~= "table" then
+        return {}
+    end
+    local list = {}
+    local isArray = false
+    for k, _ in pairs(raw) do
+        if type(k) == "number" then
+            isArray = true
+            break
+        end
+    end
+    
+    if isArray then
+        local maxIdx = 0
+        for k in pairs(raw) do
+            if type(k) == "number" and k > maxIdx then
+                maxIdx = k
+            end
+        end
+        for i = 1, maxIdx do
+            if raw[i] ~= nil then
+                table.insert(list, raw[i])
+            end
+        end
+        for k, v in pairs(raw) do
+            if type(k) ~= "number" then
+                if type(v) == "boolean" and v == true then
+                    table.insert(list, tostring(k))
+                elseif type(v) == "table" or type(v) == "string" or type(v) == "number" then
+                    table.insert(list, v)
+                end
+            end
+        end
+    else
+        for k, v in pairs(raw) do
+            if type(v) == "boolean" then
+                if v == true then
+                    table.insert(list, tostring(k))
+                end
+            elseif type(v) == "table" then
+                table.insert(list, v)
+            elseif type(k) == "string" and (type(v) == "string" or type(v) == "number") then
+                table.insert(list, { Title = tostring(k), Value = v })
+            else
+                table.insert(list, v)
+            end
+        end
+    end
+    return list
+end
+
 function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCard: GuiObject?)
     local titleText = Locale.Resolve(props.Title or props.Name or "Dropdown")
     local rawVal = if props.Value ~= nil then props.Value else props.Default
     
     local self = setmetatable({}, Dropdown)
-    self.Values = props.Values or {}
+    self.Values = props.Values or props.Options or props.Items or {}
     self.Multi = props.Multi or false
     self.AllowNone = props.AllowNone or false
     self.Locked = props.Locked or false
@@ -8115,10 +8167,13 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
     self.ClickOutsideConn = nil
     self._connections = {}
     
+    local normValues = normalizeValues(self.Values)
+    self._normalizedValues = normValues
+    
     if self.Multi then
         self.Selected = if type(rawVal) == "table" then rawVal else (rawVal and { rawVal } or {})
     else
-        self.Selected = if type(rawVal) == "string" then rawVal else (self.Values[1] and (type(self.Values[1]) == "table" and (self.Values[1] :: any).Title or self.Values[1]) or "")
+        self.Selected = if type(rawVal) == "string" then rawVal else (normValues[1] and (type(normValues[1]) == "table" and (normValues[1].Title or normValues[1].Name or normValues[1].Value) or normValues[1]) or "")
     end
     
     local descProp = props.Desc or props.Description
@@ -8378,10 +8433,23 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
             end
         end
         
-        for i, valItem in ipairs(self.Values) do
-            local rawTitle = if type(valItem) == "table" then (valItem :: any).Title else valItem
+        local normList = normalizeValues(self.Values)
+        self._normalizedValues = normList
+        
+        for i, valItem in ipairs(normList) do
+            local rawTitle = if type(valItem) == "table" 
+                then ((valItem :: any).Title or (valItem :: any).Name or (valItem :: any).Text or (valItem :: any).Label or (valItem :: any).Value)
+                else valItem
             local itemTitle = Locale.Resolve(rawTitle)
-            local rawItemVal = if type(valItem) == "table" and (valItem :: any).Value ~= nil then (valItem :: any).Value else itemTitle
+            if itemTitle == "" and type(valItem) == "table" then
+                itemTitle = tostring((valItem :: any).Value or (valItem :: any).Id or i)
+            elseif itemTitle == "" then
+                itemTitle = tostring(valItem or i)
+            end
+
+            local rawItemVal = if type(valItem) == "table" 
+                then ((valItem :: any).Value ~= nil and (valItem :: any).Value or (valItem :: any).Id or (valItem :: any).Name or (valItem :: any).Title or itemTitle)
+                else itemTitle
             local itemIcon = if type(valItem) == "table" then (valItem :: any).Icon else nil
             
             local optBtn = Instance.new("TextButton")
@@ -8393,7 +8461,7 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
             optBtn.BackgroundTransparency = 1
             optBtn.AutoButtonColor = false
             optBtn.Text = ""
-            optBtn.ZIndex = 151
+            optBtn.ZIndex = 251
             optBtn.LayoutOrder = i
             
             local optCorner = Instance.new("UICorner")
@@ -8413,7 +8481,7 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
                 icon.AnchorPoint = Vector2.new(0, 0.5)
                 icon.BackgroundTransparency = 1
                 icon.ImageColor3 = Theme.GetToken("Accent")
-                icon.ZIndex = 152
+                icon.ZIndex = 252
                 Icons.Apply(icon, itemIcon)
                 icon.Parent = optBtn
                 optOffset = 20
@@ -8428,14 +8496,15 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
             
             local optLabel = Instance.new("TextLabel")
             optLabel.Name = "Label"
-            optLabel.Size = UDim2.new(1, -optOffset - 20, 1, 0)
+            optLabel.Size = UDim2.new(1, -optOffset - 24, 1, 0)
             optLabel.Position = UDim2.new(0, optOffset, 0, 0)
             optLabel.BackgroundTransparency = 1
             Theme.ApplyTypography(optLabel, "Body", "Sub")
             optLabel.Text = itemTitle
             optLabel.TextColor3 = if isSel then Theme.GetToken("Accent") else Theme.GetToken("TextPrimary")
             optLabel.TextXAlignment = Enum.TextXAlignment.Left
-            optLabel.ZIndex = 152
+            optLabel.TextYAlignment = Enum.TextYAlignment.Center
+            optLabel.ZIndex = 252
             optLabel.Parent = optBtn
             
             local check = Instance.new("ImageLabel")
@@ -8445,7 +8514,7 @@ function Dropdown.new(parent: Instance, configEngine: any, props: any, parentCar
             check.AnchorPoint = Vector2.new(1, 0.5)
             check.BackgroundTransparency = 1
             check.ImageColor3 = Theme.GetToken("Accent")
-            check.ZIndex = 152
+            check.ZIndex = 252
             Icons.Apply(check, "check")
             check.Visible = isSel
             check.Parent = optBtn
@@ -8543,16 +8612,21 @@ function Dropdown:Open()
     
     -- Elevate Section Card and Container ZIndex so nothing can ever cover it
     if self.ParentCard then
-        self.ParentCard.ZIndex = 50
+        self.ParentCard.ZIndex = 100
     end
-    self.Container.ZIndex = 100
+    self.Container.ZIndex = 200
+    self.Trigger.ZIndex = 201
+    self.Popover.ZIndex = 250
     
     if self.UpdateOptionStates then
         self.UpdateOptionStates()
     end
     
-    local optCount = #self.Values
-    local targetH = math.clamp(optCount * 28 + 8, 40, 140)
+    local normList = self._normalizedValues or normalizeValues(self.Values)
+    local optCount = #normList
+    local totalItemH = (optCount * 26) + math.max(0, optCount - 1) * 2 + 8
+    local maxAllowedH = 200
+    local targetH = math.clamp(totalItemH, (if optCount <= 1 then totalItemH else 40), maxAllowedH)
     
     local screenH = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.Y or 1080
     local absY = self.Trigger.AbsolutePosition.Y
@@ -8564,6 +8638,8 @@ function Dropdown:Open()
         self.Popover.AnchorPoint = Vector2.new(0, 0)
     end
     
+    self.Popover.CanvasSize = UDim2.new(0, 0, 0, totalItemH)
+    self.Popover.CanvasPosition = Vector2.new(0, 0)
     self.Popover.Visible = true
     Tweener.Tween(self.Popover, Tweener.Info.Fluid, {
         Size = UDim2.new(1, 0, 0, targetH)
@@ -8618,15 +8694,29 @@ function Dropdown:Close()
     local rotTween = Tweener.Tween(self.Chevron, Tweener.Info.Fast, {
         Rotation = 0
     })
-    rotTween.Completed:Once(function()
-        if not self.IsOpen then
-            self.Popover.Visible = false
-            self.Container.ZIndex = 5
-            if self.ParentCard then
-                self.ParentCard.ZIndex = 1
+    if rotTween then
+        rotTween.Completed:Once(function()
+            if not self.IsOpen and self.Popover and self.Popover.Parent then
+                self.Popover.Visible = false
+                self.Container.ZIndex = 5
+                self.Trigger.ZIndex = 6
+                if self.ParentCard then
+                    self.ParentCard.ZIndex = 1
+                end
             end
+        end)
+    else
+        if not self.IsOpen and self.Popover then
+            pcall(function()
+                self.Popover.Visible = false
+                self.Container.ZIndex = 5
+                self.Trigger.ZIndex = 6
+                if self.ParentCard then
+                    self.ParentCard.ZIndex = 1
+                end
+            end)
         end
-    end)
+    end
 end
 
 function Dropdown:Set(val: any, skipCallback: boolean?)
@@ -8712,11 +8802,23 @@ function Dropdown:Get(): any
 end
 
 function Dropdown:Refresh(newValues: { DropdownItem })
-    self.Values = newValues
+    self.Values = newValues or {}
+    self._normalizedValues = normalizeValues(self.Values)
     self:RebuildOptions()
     self.UpdateDisplay()
     if self.UpdateOptionStates then
         self.UpdateOptionStates()
+    end
+    if self.IsOpen then
+        local normList = self._normalizedValues
+        local optCount = #normList
+        local totalItemH = (optCount * 26) + math.max(0, optCount - 1) * 2 + 8
+        local maxAllowedH = 200
+        local targetH = math.clamp(totalItemH, (if optCount <= 1 then totalItemH else 40), maxAllowedH)
+        self.Popover.CanvasSize = UDim2.new(0, 0, 0, totalItemH)
+        Tweener.Tween(self.Popover, Tweener.Info.Fast, {
+            Size = UDim2.new(1, 0, 0, targetH)
+        })
     end
 end
 
