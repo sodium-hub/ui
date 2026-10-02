@@ -1,6 +1,13 @@
+--!strict
+--[=[
+    Sodium UI - Production Standalone Distribution
+    Theme: Obsidian Amethyst (#09090B / #131318 / #8B5CF6)
+    Architecture: WindUI Deconstructed & Re-engineered
+]=]
 
 local _MODULES = {}
 local _LOADED = {}
+
 local function _require(path: string)
     if _LOADED[path] then
         return _LOADED[path]
@@ -544,12 +551,36 @@ Tweener.Info = {
 -- Weak-keyed table prevents memory leaks when instances are destroyed during tween
 local activeTweens: any = setmetatable({}, { __mode = "k" })
 
-function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: any }, onComplete: (() -> ())?): Tween?
+local function makeCompletedSignal(): any
+    return {
+        Once = function(_, fn)
+            task.defer(fn)
+        end,
+        Connect = function(_, fn)
+            task.defer(fn)
+            return { Disconnect = function() end }
+        end,
+        Wait = function() end,
+    }
+end
+
+local function makeCompletedTween(): any
+    return {
+        Completed = makeCompletedSignal(),
+        Play = function() end,
+        Pause = function() end,
+        Cancel = function() end,
+        Destroy = function() end,
+    }
+end
+
+function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: any }, onComplete: (() -> ())?): any
     if instance == nil or (instance :: any).Parent == nil then
         if (instance :: any).Parent == nil and not pcall(function()
             local _ = (instance :: any).Name
         end) then
-            return nil
+            if onComplete then task.defer(onComplete) end
+            return makeCompletedTween()
         end
     end
 
@@ -573,7 +604,7 @@ function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: a
         if onComplete then
             task.defer(onComplete)
         end
-        return nil
+        return makeCompletedTween()
     end
 
     local currentTween = activeTweens[instance]
@@ -585,7 +616,7 @@ function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: a
     local ok, tween = pcall(TweenService.Create, TweenService, instance, info, goals)
     if not ok or tween == nil then
         if onComplete then task.spawn(onComplete) end
-        return nil
+        return makeCompletedTween()
     end
     activeTweens[instance] = tween
 
@@ -603,7 +634,8 @@ function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: a
     local okPlay = pcall(tween.Play, tween)
     if not okPlay then
         activeTweens[instance] = nil
-        return nil
+        if onComplete then task.defer(onComplete) end
+        return makeCompletedTween()
     end
     return tween
 end
@@ -4508,21 +4540,29 @@ local function dismissToast(toastData: any)
             Position = UDim2.new(1, 40, 0, 0),
             GroupTransparency = 1,
         })
-        exitTween.Completed:Once(function()
-            if toastData.Slot and toastData.Slot.Parent then
-                toastData.Slot.AutomaticSize = Enum.AutomaticSize.None
-                local collapseTween = Tweener.Tween(toastData.Slot, Tweener.Info.ExitFast, {
-                    Size = UDim2.new(1, 0, 0, 0),
-                })
-                collapseTween.Completed:Once(function()
-                    if toastData.Slot and toastData.Slot.Parent then
-                        toastData.Slot:Destroy()
+        if exitTween then
+            exitTween.Completed:Once(function()
+                if toastData.Slot and toastData.Slot.Parent then
+                    toastData.Slot.AutomaticSize = Enum.AutomaticSize.None
+                    local collapseTween = Tweener.Tween(toastData.Slot, Tweener.Info.ExitFast, {
+                        Size = UDim2.new(1, 0, 0, 0),
+                    })
+                    if collapseTween then
+                        collapseTween.Completed:Once(function()
+                            if toastData.Slot and toastData.Slot.Parent then
+                                pcall(function() toastData.Slot:Destroy() end)
+                            end
+                        end)
+                    elseif toastData.Slot and toastData.Slot.Parent then
+                        pcall(function() toastData.Slot:Destroy() end)
                     end
-                end)
-            end
-        end)
+                end
+            end)
+        elseif toastData.Slot and toastData.Slot.Parent then
+            pcall(function() toastData.Slot:Destroy() end)
+        end
     elseif toastData.Slot and toastData.Slot.Parent then
-        toastData.Slot:Destroy()
+        pcall(function() toastData.Slot:Destroy() end)
     end
 end
 
@@ -4844,9 +4884,13 @@ function Popup.Show(rootGui: Instance, props: PopupProps)
         Tweener.Tween(backdrop, Tweener.Info.ExitFast, { BackgroundTransparency = 1 })
         Tweener.Tween(modal, Tweener.Info.ExitFast, { GroupTransparency = 1 })
         local tween = Tweener.Tween(modalScale, Tweener.Info.ExitFast, { Scale = 0.90 })
-        tween.Completed:Once(function()
+        if tween then
+            tween.Completed:Once(function()
+                backdrop:Destroy()
+            end)
+        else
             backdrop:Destroy()
-        end)
+        end
     end
     
     local rawButtons = props.Buttons or {
@@ -5203,9 +5247,13 @@ function Dialog.Show(parent: Instance, props: DialogProps)
         Tweener.Tween(card, Tweener.Info.ExitFast, { GroupTransparency = 1 })
         local t = Tweener.Tween(cardScale, Tweener.Info.ExitFast, { Scale = 0.90 })
         Tweener.Tween(overlay, Tweener.Info.ExitFast, { BackgroundTransparency = 1 })
-        t.Completed:Once(function()
+        if t then
+            t.Completed:Once(function()
+                overlay:Destroy()
+            end)
+        else
             overlay:Destroy()
-        end)
+        end
     end
     
     local function createButton(bData: DialogButton, alignment: string?)
