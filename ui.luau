@@ -1,13 +1,6 @@
---!strict
---[=[
-    Sodium UI - Production Standalone Distribution
-    Theme: Obsidian Amethyst (#09090B / #131318 / #8B5CF6)
-    Architecture: WindUI Deconstructed & Re-engineered
-]=]
 
 local _MODULES = {}
 local _LOADED = {}
-
 local function _require(path: string)
     if _LOADED[path] then
         return _LOADED[path]
@@ -532,32 +525,68 @@ local TweenService = game:GetService("TweenService")
 
 local Tweener = {}
 
--- Cached TweenInfos (Calibrated for ultra-smooth responsiveness)
+-- Cached TweenInfos (Calibrated for ultra-smooth responsiveness & 60 FPS fluidity)
 Tweener.Info = {
-    Micro = TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-    Fast = TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-    Normal = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-    Smooth = TweenInfo.new(0.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-    Spring = TweenInfo.new(0.36, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-    BackOut = TweenInfo.new(0.30, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+    Micro = TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+    Fast = TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+    Normal = TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+    Smooth = TweenInfo.new(0.30, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+    Fluid = TweenInfo.new(0.26, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+    Spring = TweenInfo.new(0.34, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+    BackOut = TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
     Bouncy = TweenInfo.new(0.42, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
-    ExitFast = TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
-    ExitSmooth = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-    Appear = TweenInfo.new(0.26, Enum.EasingStyle.Quart, Enum.EasingDirection.InOut),
+    ExitFast = TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
+    ExitSmooth = TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+    Appear = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
     RotateInfinite = TweenInfo.new(1.0, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1),
 }
 
 -- Weak-keyed table prevents memory leaks when instances are destroyed during tween
 local activeTweens: any = setmetatable({}, { __mode = "k" })
 
-function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: any }, onComplete: (() -> ())?): Tween
+function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: any }, onComplete: (() -> ())?): Tween?
+    if instance == nil or (instance :: any).Parent == nil then
+        if (instance :: any).Parent == nil and not pcall(function()
+            local _ = (instance :: any).Name
+        end) then
+            return nil
+        end
+    end
+
+    -- Zero-waste optimization: skip tween if instance already matches target goals
+    local hasDiff = false
+    for prop, targetVal in pairs(goals) do
+        local ok, curVal = pcall(function()
+            return (instance :: any)[prop]
+        end)
+        if not ok or curVal ~= targetVal then
+            hasDiff = true
+            break
+        end
+    end
+    if not hasDiff then
+        local cur = activeTweens[instance]
+        if cur then
+            cur:Cancel()
+            activeTweens[instance] = nil
+        end
+        if onComplete then
+            task.defer(onComplete)
+        end
+        return nil
+    end
+
     local currentTween = activeTweens[instance]
     if currentTween then
         currentTween:Cancel()
         activeTweens[instance] = nil
     end
 
-    local tween = TweenService:Create(instance, info, goals)
+    local ok, tween = pcall(TweenService.Create, TweenService, instance, info, goals)
+    if not ok or tween == nil then
+        if onComplete then task.spawn(onComplete) end
+        return nil
+    end
     activeTweens[instance] = tween
 
     tween.Completed:Once(function()
@@ -565,10 +594,17 @@ function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: a
             activeTweens[instance] = nil
         end
         if onComplete then
-            onComplete()
+            local ok2, err = pcall(onComplete)
+            if not ok2 then
+                warn("[SodiumUI.Tweener] " .. tostring(err))
+            end
         end
     end)
-    tween:Play()
+    local okPlay = pcall(tween.Play, tween)
+    if not okPlay then
+        activeTweens[instance] = nil
+        return nil
+    end
     return tween
 end
 
@@ -2788,44 +2824,67 @@ function Icons.LoadPack(packName)
     return false
 end
 
+local _iconResolutionCache: { [string]: any } = {}
+
 local function resolveFromPack(packName, query)
     local pName = string.lower(packName or Icons.IconsType)
+    local cacheKey = pName .. ":" .. tostring(query)
+    local cached = _iconResolutionCache[cacheKey]
+    if cached ~= nil then
+        return if cached == false then nil else cached
+    end
+
     local pack = Icons.Packs[pName]
     if not pack then
         Icons.LoadPack(pName)
         pack = Icons.Packs[pName]
-        if not pack then return nil end
+        if not pack then
+            _iconResolutionCache[cacheKey] = false
+            return nil
+        end
     end
     
     if pack[query] then
+        _iconResolutionCache[cacheKey] = pack[query]
         return pack[query]
     end
     
     if pack.Icons and pack.Icons[query] then
         local item = pack.Icons[query]
         local sheetId = pack.Spritesheets and pack.Spritesheets[tostring(item.Image)] or item.Image
-        return {
+        local res = {
             sheetId,
             item,
         }
+        _iconResolutionCache[cacheKey] = res
+        return res
     end
     
     local alias = IconAliases[query]
     if alias then
-        if pack[alias] then return pack[alias] end
+        if pack[alias] then
+            _iconResolutionCache[cacheKey] = pack[alias]
+            return pack[alias]
+        end
         if pack.Icons and pack.Icons[alias] then
             local item = pack.Icons[alias]
             local sheetId = pack.Spritesheets and pack.Spritesheets[tostring(item.Image)] or item.Image
-            return { sheetId, item }
+            local res = { sheetId, item }
+            _iconResolutionCache[cacheKey] = res
+            return res
         end
     end
     
     if #query > 3 and query:sub(-1) == "s" then
         local singular = query:sub(1, -2)
         local fromSingular = resolveFromPack(pName, singular)
-        if fromSingular then return fromSingular end
+        if fromSingular then
+            _iconResolutionCache[cacheKey] = fromSingular
+            return fromSingular
+        end
     end
     
+    _iconResolutionCache[cacheKey] = false
     return nil
 end
 
@@ -3205,6 +3264,10 @@ function Container:_updateScaling(immediate: boolean?)
     local minScale = if self.IsMobile then 0.52 else 0.50
     local dpiMax = math.clamp(vp.X / 1920, 1.0, 1.85)
     local targetScale = math.clamp(fitScale, minScale, dpiMax)
+    
+    if not immediate and math.abs(self.UIScale.Scale - targetScale) < 0.003 then
+        return
+    end
     
     if immediate then
         self.UIScale.Scale = targetScale
@@ -7865,8 +7928,8 @@ function Slider:Set(newVal: number, skipCallback: boolean?, animate: boolean?)
     end
     
     if animate then
-        self._fillTween = Tweener.Tween(self.Fill, Tweener.Info.Normal, { Size = UDim2.new(pct, 0, 1, 0) })
-        self._thumbTween = Tweener.Tween(self.Thumb, Tweener.Info.Normal, { Position = UDim2.new(pct, 0, 0.5, 0) }, function()
+        self._fillTween = Tweener.Tween(self.Fill, Tweener.Info.Fluid, { Size = UDim2.new(pct, 0, 1, 0) })
+        self._thumbTween = Tweener.Tween(self.Thumb, Tweener.Info.Fluid, { Position = UDim2.new(pct, 0, 0.5, 0) }, function()
             self._fillTween = nil
             self._thumbTween = nil
         end)
@@ -8454,7 +8517,7 @@ function Dropdown:Open()
     end
     
     self.Popover.Visible = true
-    Tweener.Tween(self.Popover, Tweener.Info.Fast, {
+    Tweener.Tween(self.Popover, Tweener.Info.Fluid, {
         Size = UDim2.new(1, 0, 0, targetH)
     })
     Tweener.Tween(self.Chevron, Tweener.Info.Fast, {
@@ -10366,10 +10429,10 @@ function Tab:Select(animated: boolean?)
     
     local isAnimated = if animated ~= nil then animated else true
     if isAnimated then
-        self.PageWrapper.Position = UDim2.new(0, 0, 0, 8)
+        self.PageWrapper.Position = UDim2.new(0, 0, 0, 6)
         self.PageWrapper.GroupTransparency = 1
         
-        self._pageTween = Tweener.Tween(self.PageWrapper, Tweener.Info.Normal, {
+        self._pageTween = Tweener.Tween(self.PageWrapper, Tweener.Info.Fluid, {
             Position = UDim2.new(0, 0, 0, 0),
             GroupTransparency = 0,
         }, function()
@@ -12417,11 +12480,11 @@ function Window:ToggleVisibility()
         self.IsMinimized = true
         
         -- Synchronized composite micro-transition (MainFrame + DropShadow scale and fade concurrently)
-        local tweenInfo = Tweener.Info.Fast
+        local exitTween = Tweener.Info.ExitFast
         if self.WindowScale and self.DropShadowScale and self.DropShadow then
-            Tweener.Tween(self.DropShadow, tweenInfo, { ImageTransparency = 1.0 })
-            Tweener.Tween(self.DropShadowScale, tweenInfo, { Scale = 0.94 })
-            Tweener.Tween(self.WindowScale, tweenInfo, { Scale = 0.94 }, function()
+            Tweener.Tween(self.DropShadow, exitTween, { ImageTransparency = 1.0 })
+            Tweener.Tween(self.DropShadowScale, exitTween, { Scale = 0.94 })
+            Tweener.Tween(self.WindowScale, exitTween, { Scale = 0.94 }, function()
                 if not self.IsVisible then
                     self.MainFrame.Visible = false
                     if self.DropShadow then
@@ -12442,8 +12505,8 @@ function Window:ToggleVisibility()
             self.MinWidget.Visible = true
             if self.MinShadow then self.MinShadow.Visible = true end
             if self.MinWidgetScale then
-                self.MinWidgetScale.Scale = 0.8
-                Tweener.Tween(self.MinWidgetScale, Tweener.Info.Fast, { Scale = 1.0 })
+                self.MinWidgetScale.Scale = 0.82
+                Tweener.Tween(self.MinWidgetScale, Tweener.Info.BackOut, { Scale = 1.0 })
             end
         end
     else
@@ -12462,14 +12525,15 @@ function Window:ToggleVisibility()
             if self.MinShadow then self.MinShadow.Visible = false end
         end
         
-        -- Synchronized entrance micro-transition in lockstep
-        local tweenInfo = Tweener.Info.Fast
+        -- Synchronized entrance micro-transition in lockstep (smooth subtle spring)
+        local entranceTween = Tweener.Info.BackOut
+        local fadeTween = Tweener.Info.Fast
         if self.WindowScale and self.DropShadowScale and self.DropShadow then
             self.WindowScale.Scale = 0.94
             self.DropShadowScale.Scale = 0.94
-            Tweener.Tween(self.WindowScale, tweenInfo, { Scale = 1.0 })
-            Tweener.Tween(self.DropShadowScale, tweenInfo, { Scale = 1.0 })
-            Tweener.Tween(self.DropShadow, tweenInfo, { ImageTransparency = 0.52 })
+            Tweener.Tween(self.WindowScale, entranceTween, { Scale = 1.0 })
+            Tweener.Tween(self.DropShadowScale, entranceTween, { Scale = 1.0 })
+            Tweener.Tween(self.DropShadow, fadeTween, { ImageTransparency = 0.52 })
         end
     end
 end
