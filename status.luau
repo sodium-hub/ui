@@ -47,7 +47,7 @@ return {
     },
     {
         Name = "AnimeVerse Card Farm",
-        Status = "Risk",
+        Status = "Online",
         Icon = "https://www.roblox.com/games/122649989234281/AnimeVerse-Card-Farm",
     },
 }
