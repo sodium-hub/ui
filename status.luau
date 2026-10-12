@@ -27,7 +27,7 @@ return {
     },
     {
         Name = "Build A Boat",
-        Status = "Update",
+        Status = "Online",
         Icon = "https://www.roblox.com/games/537413528/Build-A-Boat-For-Treasure",
     },
     {
