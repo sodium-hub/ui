@@ -11454,6 +11454,8 @@ local Icons = _require("Core/Icons")
 local Compat = _require("Core/Compat")
 local Section = _require("Components/Section")
 
+local _scriptStartTime = tick()
+
 local Tab = {}
 Tab.__index = Tab
 
@@ -11799,150 +11801,6 @@ function Tab:Divider(props: any)
     return self:_getOrCreateDefaultSection():Divider(props)
 end
 
-function Tab:ProfileCard(rawProps: any?)
-    local props = rawProps or {}
-    local Players = game:GetService("Players")
-    local lp = Players.LocalPlayer
-
-    -- macOS System Settings / Apple ID Profile Card
-    local card = Instance.new("Frame")
-    card.Name = "ProfileCard"
-    card.Size = UDim2.new(1, 0, 0, 84)
-    card.BackgroundColor3 = Theme.GetToken("Card")
-    card.BorderSizePixel = 0
-    card.LayoutOrder = props.LayoutOrder or 0
-    Theme.Bind(card, "BackgroundColor3", "Card")
-
-    local cardCorner = Instance.new("UICorner")
-    cardCorner.CornerRadius = UDim.new(0, 12)
-    cardCorner.Parent = card
-
-    -- macOS subtle brushed glass gradient
-    local cardGradient = Instance.new("UIGradient")
-    cardGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(225, 225, 235)),
-    })
-    cardGradient.Rotation = 90
-    cardGradient.Parent = card
-
-    local cardStroke = Instance.new("UIStroke")
-    cardStroke.Color = Theme.GetToken("BorderSubtle")
-    cardStroke.Thickness = 1
-    cardStroke.Transparency = 0.4
-    cardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    cardStroke.Parent = card
-    Theme.Bind(cardStroke, "Color", "BorderSubtle")
-
-    local cardPad = Instance.new("UIPadding")
-    cardPad.PaddingLeft = UDim.new(0, 16)
-    cardPad.PaddingRight = UDim.new(0, 16)
-    cardPad.PaddingTop = UDim.new(0, 12)
-    cardPad.PaddingBottom = UDim.new(0, 12)
-    cardPad.Parent = card
-
-    -- Left: macOS Rounded Square Avatar Frame with halo ring (AnchorPoint 0.5, 0.5)
-    local avatarFrame = Instance.new("Frame")
-    avatarFrame.Name = "AvatarFrame"
-    avatarFrame.Size = UDim2.fromOffset(58, 58)
-    avatarFrame.Position = UDim2.new(0, 29, 0.5, 0)
-    avatarFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    avatarFrame.BackgroundColor3 = Theme.GetToken("SurfaceHover")
-    avatarFrame.BorderSizePixel = 0
-    Theme.Bind(avatarFrame, "BackgroundColor3", "SurfaceHover")
-
-    local avatarCorner = Instance.new("UICorner")
-    avatarCorner.CornerRadius = UDim.new(0, 12) -- Rounded square
-    avatarCorner.Parent = avatarFrame
-
-    local avatarStroke = Instance.new("UIStroke")
-    avatarStroke.Color = Color3.fromRGB(255, 255, 255)
-    avatarStroke.Thickness = 1.4
-    avatarStroke.Transparency = 0.75
-    avatarStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    avatarStroke.Parent = avatarFrame
-
-    local avatarImg = Instance.new("ImageLabel")
-    avatarImg.Name = "AvatarImage"
-    avatarImg.Size = UDim2.fromScale(1, 1)
-    avatarImg.Position = UDim2.fromScale(0.5, 0.5)
-    avatarImg.AnchorPoint = Vector2.new(0.5, 0.5)
-    avatarImg.BackgroundTransparency = 1
-    avatarImg.ScaleType = Enum.ScaleType.Fit
-
-    local imgCorner = Instance.new("UICorner")
-    imgCorner.CornerRadius = UDim.new(0, 12) -- Rounded square matching frame
-    imgCorner.Parent = avatarImg
-    avatarImg.Parent = avatarFrame
-    avatarFrame.Parent = card
-
-    -- Right / Next to Avatar: Text Stack (AnchorPoint 0.5, 0.5)
-    local textStack = Instance.new("Frame")
-    textStack.Name = "TextStack"
-    textStack.Size = UDim2.new(1, -72, 0, 58)
-    textStack.Position = UDim2.new(0.5, 36, 0.5, 0)
-    textStack.AnchorPoint = Vector2.new(0.5, 0.5)
-    textStack.BackgroundTransparency = 1
-    textStack.Parent = card
-
-    local listLayout = Instance.new("UIListLayout")
-    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    listLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-    listLayout.Padding = UDim.new(0, -2) -- Compact tight spacing between DisplayName and Username
-    listLayout.Parent = textStack
-
-    local displayName = props.DisplayName or (lp and lp.DisplayName) or "Player"
-    local username = props.Username or (lp and ("@" .. lp.Name)) or "@Username"
-
-    local userLabel = Instance.new("TextLabel")
-    userLabel.Name = "Username"
-    userLabel.Size = UDim2.new(1, 0, 0, 16)
-    userLabel.BackgroundTransparency = 1
-    Theme.ApplyTypography(userLabel, "Body", "Small")
-    Locale.Bind(userLabel, "Text", username)
-    userLabel.TextColor3 = Theme.GetToken("Placeholder")
-    userLabel.TextXAlignment = Enum.TextXAlignment.Left
-    userLabel.TextTruncate = Enum.TextTruncate.AtEnd
-    userLabel.LayoutOrder = 1 -- Username placed on top
-    userLabel.Parent = textStack
-    Theme.Bind(userLabel, "TextColor3", "Placeholder")
-
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "DisplayName"
-    nameLabel.Size = UDim2.new(1, 0, 0, 26)
-    nameLabel.BackgroundTransparency = 1
-    Theme.ApplyTypography(nameLabel, "Display")
-    nameLabel.TextSize = 22 -- Explicit Size 22 for prominent DisplayName
-    Locale.Bind(nameLabel, "Text", displayName)
-    nameLabel.TextColor3 = Theme.GetToken("TextPrimary")
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-    nameLabel.LayoutOrder = 2 -- DisplayName placed below
-    nameLabel.Parent = textStack
-    Theme.Bind(nameLabel, "TextColor3", "TextPrimary")
-
-    -- Load player avatar headshot
-    if lp then
-        task.spawn(function()
-            local thumbId = props.Avatar
-            if not thumbId then
-                local ok, thumb = pcall(function()
-                    return Players:GetUserThumbnailAsync(lp.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
-                end)
-                if ok and thumb then
-                    thumbId = thumb
-                end
-            end
-            if thumbId and avatarImg and avatarImg.Parent then
-                avatarImg.Image = thumbId
-            end
-        end)
-    end
-
-    card.Parent = self.Container
-    return card
-end
-
 function Tab:ServerCard(rawProps: any?)
     local props = rawProps or {}
     local MarketplaceService = game:GetService("MarketplaceService")
@@ -12207,6 +12065,1953 @@ function Tab:ServerCard(rawProps: any?)
 
     card.Parent = self.Container
     return card
+end
+
+function Tab:DashboardView(rawProps: any?)
+    local props = rawProps or {}
+    local Players = game:GetService("Players")
+    local lp = Players.LocalPlayer
+
+    local root = Instance.new("Frame")
+    root.Name = "DashboardView"
+    root.Size = UDim2.new(1, 0, 0, 0)
+    root.AutomaticSize = Enum.AutomaticSize.Y
+    root.BackgroundTransparency = 1
+    root.LayoutOrder = props.LayoutOrder or 0
+
+    local rootLayout = Instance.new("UIListLayout")
+    rootLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    rootLayout.Padding = UDim.new(0, 14)
+    rootLayout.Parent = root
+
+    -- 1. Breadcrumb Bar (General -> Dashboard, Version 1.0.0)
+    local breadcrumbBar = Instance.new("Frame")
+    breadcrumbBar.Name = "BreadcrumbBar"
+    breadcrumbBar.Size = UDim2.new(1, 0, 0, 22)
+    breadcrumbBar.BackgroundTransparency = 1
+    breadcrumbBar.LayoutOrder = 1
+
+    local bcLeft = Instance.new("Frame")
+    bcLeft.Name = "LeftStack"
+    bcLeft.Size = UDim2.new(0, 220, 1, 0)
+    bcLeft.BackgroundTransparency = 1
+    bcLeft.Parent = breadcrumbBar
+
+    local bcLayout = Instance.new("UIListLayout")
+    bcLayout.FillDirection = Enum.FillDirection.Horizontal
+    bcLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    bcLayout.Padding = UDim.new(0, 6)
+    bcLayout.Parent = bcLeft
+
+    local catLabel = Instance.new("TextLabel")
+    catLabel.Name = "Category"
+    catLabel.AutomaticSize = Enum.AutomaticSize.X
+    catLabel.Size = UDim2.new(0, 0, 1, 0)
+    catLabel.BackgroundTransparency = 1
+    catLabel.LayoutOrder = 1
+    Theme.ApplyTypography(catLabel, "Body", "Sub")
+    catLabel.Text = props.Category or "General"
+    catLabel.TextColor3 = Color3.fromRGB(130, 130, 145)
+    catLabel.TextXAlignment = Enum.TextXAlignment.Left
+    catLabel.Parent = bcLeft
+
+    local arrowLabel = Instance.new("TextLabel")
+    arrowLabel.Name = "Arrow"
+    arrowLabel.AutomaticSize = Enum.AutomaticSize.X
+    arrowLabel.Size = UDim2.new(0, 0, 1, 0)
+    arrowLabel.BackgroundTransparency = 1
+    arrowLabel.LayoutOrder = 2
+    Theme.ApplyTypography(arrowLabel, "Body", "Sub")
+    arrowLabel.Text = "→"
+    arrowLabel.TextColor3 = Color3.fromRGB(90, 90, 105)
+    arrowLabel.Parent = bcLeft
+
+    local pageLabel = Instance.new("TextLabel")
+    pageLabel.Name = "CurrentPage"
+    pageLabel.AutomaticSize = Enum.AutomaticSize.X
+    pageLabel.Size = UDim2.new(0, 0, 1, 0)
+    pageLabel.BackgroundTransparency = 1
+    pageLabel.LayoutOrder = 3
+    Theme.ApplyTypography(pageLabel, "Header", "Header")
+    pageLabel.Text = props.CurrentPage or "Dashboard"
+    pageLabel.TextColor3 = Theme.GetToken("Accent") -- Warm Amber Orange
+    pageLabel.TextXAlignment = Enum.TextXAlignment.Left
+    pageLabel.Parent = bcLeft
+    Theme.Bind(pageLabel, "TextColor3", "Accent")
+
+    -- Premium Setting Button (Replaces "1.0.0" on top right of breadcrumb)
+    local settingBtn = Instance.new("TextButton")
+    settingBtn.Name = "SettingButton"
+    settingBtn.Size = UDim2.fromOffset(88, 26)
+    settingBtn.Position = UDim2.new(1, 0, 0.5, 0)
+    settingBtn.AnchorPoint = Vector2.new(1, 0.5)
+    settingBtn.BackgroundColor3 = Color3.fromRGB(24, 20, 28)
+    settingBtn.AutoButtonColor = false
+    settingBtn.BorderSizePixel = 0
+    settingBtn.Text = ""
+    settingBtn.Active = true
+
+    local sbCorner = Instance.new("UICorner")
+    sbCorner.CornerRadius = UDim.new(0, 8)
+    sbCorner.Parent = settingBtn
+
+    local sbStroke = Instance.new("UIStroke")
+    sbStroke.Color = Theme.GetToken("BorderAccent")
+    sbStroke.Thickness = 1
+    sbStroke.Transparency = 0.65
+    sbStroke.Parent = settingBtn
+    Theme.Bind(sbStroke, "Color", "BorderAccent")
+
+    local sbLayout = Instance.new("UIListLayout")
+    sbLayout.FillDirection = Enum.FillDirection.Horizontal
+    sbLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    sbLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    sbLayout.Padding = UDim.new(0, 6)
+    sbLayout.Parent = settingBtn
+
+    local sbIcon = Instance.new("ImageLabel")
+    sbIcon.Name = "Icon"
+    sbIcon.Size = UDim2.fromOffset(14, 14)
+    sbIcon.BackgroundTransparency = 1
+    sbIcon.ImageColor3 = Theme.GetToken("Accent")
+    Icons.Apply(sbIcon, "settings")
+    sbIcon.Active = false
+    sbIcon.Parent = settingBtn
+    Theme.Bind(sbIcon, "ImageColor3", "Accent")
+
+    local sbText = Instance.new("TextLabel")
+    sbText.Name = "Text"
+    sbText.Size = UDim2.new(0, 0, 1, 0)
+    sbText.AutomaticSize = Enum.AutomaticSize.X
+    sbText.BackgroundTransparency = 1
+    Theme.ApplyTypography(sbText, "Header", "Small")
+    sbText.Text = "Settings"
+    sbText.TextColor3 = Color3.fromRGB(235, 235, 245)
+    sbText.Active = false
+    sbText.Parent = settingBtn
+
+    Tweener.BindPressFeedback(settingBtn, settingBtn)
+
+    local function openSettingsPopup()
+        local win = self.Window
+        local targetParent = (win and win.MainFrame) or root
+        if not targetParent or targetParent:FindFirstChild("SettingsModalOverlay") then
+            return
+        end
+
+        -- Clean up any residual global blur to ensure 3D world is untouched
+        pcall(function()
+            local oldBlur = game:GetService("Lighting"):FindFirstChild("SodiumSettingsBlur")
+            if oldBlur then oldBlur:Destroy() end
+        end)
+
+        -- Scrim overlay strictly confined to UI Window (MainFrame)
+        local overlay = Instance.new("TextButton")
+        overlay.Name = "SettingsModalOverlay"
+        overlay.Size = UDim2.fromScale(1, 1)
+        overlay.Position = UDim2.fromScale(0, 0)
+        overlay.BackgroundColor3 = Color3.fromRGB(10, 8, 14)
+        overlay.BackgroundTransparency = 1
+        overlay.Text = ""
+        overlay.AutoButtonColor = false
+        overlay.Active = true
+        overlay.ZIndex = 120
+
+        local ovCorner = Instance.new("UICorner")
+        ovCorner.CornerRadius = Theme.Radii.Window
+        ovCorner.Parent = overlay
+
+        local ovGrad = Instance.new("UIGradient")
+        ovGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 14, 24)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 7, 12)),
+        })
+        ovGrad.Rotation = 45
+        ovGrad.Parent = overlay
+
+        -- Modal Card (Structured matching Main UI window: 14px rounded corners, TopBar with Logo & Title, Theme background)
+        local modal = Instance.new("Frame")
+        modal.Name = "SettingsModalCard"
+        modal.Size = UDim2.fromOffset(390, 185)
+        modal.Position = UDim2.fromScale(0.5, 0.5)
+        modal.AnchorPoint = Vector2.new(0.5, 0.5)
+        modal.BackgroundColor3 = Theme.GetToken("Background")
+        modal.BorderSizePixel = 0
+        modal.ZIndex = 121
+        modal.ClipsDescendants = false
+        Theme.Bind(modal, "BackgroundColor3", "Background")
+
+        local mCorner = Instance.new("UICorner")
+        mCorner.CornerRadius = Theme.Radii.Window
+        mCorner.Parent = modal
+
+        local mStroke = Instance.new("UIStroke")
+        mStroke.Color = Theme.GetToken("BorderSubtle")
+        mStroke.Thickness = 1
+        mStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+        mStroke.Parent = modal
+        Theme.Bind(mStroke, "Color", "BorderSubtle")
+
+        local mScale = Instance.new("UIScale")
+        mScale.Scale = 0.90
+        mScale.Parent = modal
+
+        -- Modal TopBar (Matches Main UI TopBar structure with Logo & Brand Title)
+        local mHeader = Instance.new("Frame")
+        mHeader.Name = "TopBar"
+        mHeader.Size = UDim2.new(1, 0, 0, 46)
+        mHeader.BackgroundTransparency = 1
+        mHeader.ZIndex = 122
+        mHeader.Parent = modal
+
+        local mHeadPad = Instance.new("UIPadding")
+        mHeadPad.PaddingLeft = UDim.new(0, 16)
+        mHeadPad.PaddingRight = UDim.new(0, 14)
+        mHeadPad.Parent = mHeader
+
+        local hLeft = Instance.new("Frame")
+        hLeft.Name = "TitleContainer"
+        hLeft.Size = UDim2.new(1, -40, 1, 0)
+        hLeft.BackgroundTransparency = 1
+        hLeft.Parent = mHeader
+
+        local hlLayout = Instance.new("UIListLayout")
+        hlLayout.FillDirection = Enum.FillDirection.Horizontal
+        hlLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        hlLayout.Padding = UDim.new(0, 8)
+        hlLayout.Parent = hLeft
+
+        -- TopBar Logo Image (Matching Main UI logo 120284703484003)
+        local hLogo = Instance.new("ImageLabel")
+        hLogo.Name = "Logo"
+        hLogo.Size = UDim2.fromOffset(28, 28)
+        hLogo.BackgroundTransparency = 1
+        hLogo.ScaleType = Enum.ScaleType.Fit
+        Icons.ApplyAsset(hLogo, "rbxassetid://120284703484003")
+        hLogo.Active = false
+        hLogo.Parent = hLeft
+
+        local hTitle = Instance.new("TextLabel")
+        hTitle.Name = "Title"
+        hTitle.Size = UDim2.new(0, 0, 1, 0)
+        hTitle.AutomaticSize = Enum.AutomaticSize.X
+        hTitle.BackgroundTransparency = 1
+        Theme.ApplyTypography(hTitle, "Header", "Header")
+        hTitle.Text = "Settings"
+        hTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+        hTitle.TextXAlignment = Enum.TextXAlignment.Left
+        hTitle.Active = false
+        hTitle.Parent = hLeft
+
+        -- Close Button with 100% Transparent Background (matching Main UI close control)
+        local closeBtn = Instance.new("ImageButton")
+        closeBtn.Name = "CloseButton"
+        closeBtn.Size = UDim2.fromOffset(26, 26)
+        closeBtn.Position = UDim2.new(1, 0, 0.5, 0)
+        closeBtn.AnchorPoint = Vector2.new(1, 0.5)
+        closeBtn.BackgroundTransparency = 1 -- Transparent background
+        closeBtn.AutoButtonColor = false
+        closeBtn.Active = true
+        closeBtn.Parent = mHeader
+
+        local closeIcon = Instance.new("ImageLabel")
+        closeIcon.Size = UDim2.fromOffset(15, 15)
+        closeIcon.Position = UDim2.fromScale(0.5, 0.5)
+        closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+        closeIcon.BackgroundTransparency = 1
+        closeIcon.ImageColor3 = Color3.fromRGB(210, 210, 220)
+        Icons.Apply(closeIcon, "x")
+        closeIcon.Active = false
+        closeIcon.Parent = closeBtn
+        Tweener.BindPressFeedback(closeBtn, closeBtn)
+
+        -- Topbar Bottom Divider Line
+        local hDivider = Instance.new("Frame")
+        hDivider.Name = "BottomBorder"
+        hDivider.Size = UDim2.new(1, 0, 0, 1)
+        hDivider.Position = UDim2.new(0, 0, 1, -1)
+        hDivider.BackgroundColor3 = Theme.GetToken("BorderSubtle")
+        hDivider.BorderSizePixel = 0
+        hDivider.ZIndex = 122
+        hDivider.Parent = mHeader
+        Theme.Bind(hDivider, "BackgroundColor3", "BorderSubtle")
+
+        -- Content Body
+        local mBody = Instance.new("Frame")
+        mBody.Name = "Body"
+        mBody.Size = UDim2.new(1, -32, 1, -56)
+        mBody.Position = UDim2.new(0, 16, 0, 52)
+        mBody.BackgroundTransparency = 1
+        mBody.ZIndex = 122
+        mBody.Parent = modal
+
+        local mbLayout = Instance.new("UIListLayout")
+        mbLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        mbLayout.Padding = UDim.new(0, 8)
+        mbLayout.Parent = mBody
+
+        local function createSettingRow(iconName: string, title: string, subtitle: string): (Frame, Frame)
+            local row = Instance.new("Frame")
+            row.Size = UDim2.new(1, 0, 0, 48)
+            row.BackgroundColor3 = Theme.GetToken("Card")
+            row.BorderSizePixel = 0
+            Theme.Bind(row, "BackgroundColor3", "Card")
+
+            local rCorner = Instance.new("UICorner")
+            rCorner.CornerRadius = Theme.Radii.Element
+            rCorner.Parent = row
+
+            local rStroke = Instance.new("UIStroke")
+            rStroke.Color = Theme.GetToken("BorderSubtle")
+            rStroke.Thickness = 1
+            rStroke.Parent = row
+            Theme.Bind(rStroke, "Color", "BorderSubtle")
+
+            local rPad = Instance.new("UIPadding")
+            rPad.PaddingLeft = UDim.new(0, 14)
+            rPad.PaddingRight = UDim.new(0, 12)
+            rPad.Parent = row
+
+            local icBox = Instance.new("Frame")
+            icBox.Size = UDim2.fromOffset(28, 28)
+            icBox.Position = UDim2.new(0, 0, 0.5, 0)
+            icBox.AnchorPoint = Vector2.new(0, 0.5)
+            icBox.BackgroundColor3 = Color3.fromRGB(36, 20, 10)
+            icBox.BorderSizePixel = 0
+            local ibc = Instance.new("UICorner")
+            ibc.CornerRadius = UDim.new(0, 8)
+            ibc.Parent = icBox
+
+            local icImg = Instance.new("ImageLabel")
+            icImg.Size = UDim2.fromOffset(15, 15)
+            icImg.Position = UDim2.fromScale(0.5, 0.5)
+            icImg.AnchorPoint = Vector2.new(0.5, 0.5)
+            icImg.BackgroundTransparency = 1
+            icImg.ImageColor3 = Theme.GetToken("Accent")
+            Icons.Apply(icImg, iconName)
+            icImg.Active = false
+            icImg.Parent = icBox
+            Theme.Bind(icImg, "ImageColor3", "Accent")
+            icBox.Parent = row
+
+            local tCol = Instance.new("Frame")
+            tCol.Size = UDim2.new(1, -150, 1, 0)
+            tCol.Position = UDim2.new(0, 38, 0, 0)
+            tCol.BackgroundTransparency = 1
+            tCol.Parent = row
+            local tcLay = Instance.new("UIListLayout")
+            tcLay.SortOrder = Enum.SortOrder.LayoutOrder
+            tcLay.VerticalAlignment = Enum.VerticalAlignment.Center
+            tcLay.Padding = UDim.new(0, 1)
+            tcLay.Parent = tCol
+
+            local tLab = Instance.new("TextLabel")
+            tLab.Size = UDim2.new(1, 0, 0, 16)
+            tLab.BackgroundTransparency = 1
+            Theme.ApplyTypography(tLab, "Header", "Small")
+            tLab.Text = title
+            tLab.TextColor3 = Color3.fromRGB(255, 255, 255)
+            tLab.TextXAlignment = Enum.TextXAlignment.Left
+            tLab.Parent = tCol
+
+            local sLab = Instance.new("TextLabel")
+            sLab.Size = UDim2.new(1, 0, 0, 13)
+            sLab.BackgroundTransparency = 1
+            Theme.ApplyTypography(sLab, "Body", "Small")
+            sLab.Text = subtitle
+            sLab.TextColor3 = Theme.GetToken("Placeholder")
+            sLab.TextXAlignment = Enum.TextXAlignment.Left
+            sLab.Parent = tCol
+
+            local rightSlot = Instance.new("Frame")
+            rightSlot.Size = UDim2.new(0, 105, 1, 0)
+            rightSlot.Position = UDim2.new(1, 0, 0, 0)
+            rightSlot.AnchorPoint = Vector2.new(1, 0)
+            rightSlot.BackgroundTransparency = 1
+            rightSlot.Parent = row
+
+            row.Parent = mBody
+            return row, rightSlot
+        end
+
+        -- Row 1: Language Switcher (EN / TH) with Smooth Sliding Indicator Animation
+        local _, langSlot = createSettingRow("languages", "Language / ภาษา", "Interface display language • ภาษาที่ใช้แสดงผล")
+        local langBtnBox = Instance.new("Frame")
+        langBtnBox.Size = UDim2.new(1, 0, 0, 28)
+        langBtnBox.Position = UDim2.new(0, 0, 0.5, 0)
+        langBtnBox.AnchorPoint = Vector2.new(0, 0.5)
+        langBtnBox.BackgroundColor3 = Color3.fromRGB(20, 16, 26)
+        langBtnBox.ClipsDescendants = true
+        local lbbCorner = Instance.new("UICorner")
+        lbbCorner.CornerRadius = UDim.new(0, 7)
+        lbbCorner.Parent = langBtnBox
+
+        local currentLang = (win and win.GetLanguage and win:GetLanguage()) or "EN"
+
+        -- Smooth Sliding Pill Indicator
+        local langIndicator = Instance.new("Frame")
+        langIndicator.Name = "Indicator"
+        langIndicator.Size = UDim2.new(0.5, -3, 1, -4)
+        langIndicator.Position = if currentLang == "EN" then UDim2.new(0, 2, 0.5, 0) else UDim2.new(0.5, 1, 0.5, 0)
+        langIndicator.AnchorPoint = Vector2.new(0, 0.5)
+        langIndicator.BackgroundColor3 = Theme.GetToken("Accent")
+        langIndicator.BorderSizePixel = 0
+        langIndicator.ZIndex = 1
+        local liCorner = Instance.new("UICorner")
+        liCorner.CornerRadius = UDim.new(0, 6)
+        liCorner.Parent = langIndicator
+        Theme.Bind(langIndicator, "BackgroundColor3", "Accent")
+        langIndicator.Parent = langBtnBox
+
+        local btnEN = Instance.new("TextButton")
+        btnEN.Name = "Btn_EN"
+        btnEN.Size = UDim2.new(0.5, 0, 1, 0)
+        btnEN.Position = UDim2.new(0, 0, 0, 0)
+        btnEN.BackgroundTransparency = 1
+        btnEN.AutoButtonColor = false
+        btnEN.ZIndex = 2
+        Theme.ApplyTypography(btnEN, "Header", "Small")
+        btnEN.Text = "EN"
+        btnEN.TextColor3 = if currentLang == "EN" then Color3.fromRGB(255, 255, 255) else Color3.fromRGB(156, 163, 175)
+        btnEN.Parent = langBtnBox
+
+        local btnTH = Instance.new("TextButton")
+        btnTH.Name = "Btn_TH"
+        btnTH.Size = UDim2.new(0.5, 0, 1, 0)
+        btnTH.Position = UDim2.new(0.5, 0, 0, 0)
+        btnTH.BackgroundTransparency = 1
+        btnTH.AutoButtonColor = false
+        btnTH.ZIndex = 2
+        Theme.ApplyTypography(btnTH, "Header", "Small")
+        btnTH.Text = "TH"
+        btnTH.TextColor3 = if currentLang == "TH" then Color3.fromRGB(255, 255, 255) else Color3.fromRGB(156, 163, 175)
+        btnTH.Parent = langBtnBox
+
+        local function updateLangSelection(newLang: string)
+            if win and win.SetLanguage then win:SetLanguage(newLang) end
+            local targetPos = if newLang == "EN" then UDim2.new(0, 2, 0.5, 0) else UDim2.new(0.5, 1, 0.5, 0)
+            Tweener.Tween(langIndicator, TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = targetPos })
+            if newLang == "EN" then
+                Tweener.Tween(btnEN, TweenInfo.new(0.18), { TextColor3 = Color3.fromRGB(255, 255, 255) })
+                Tweener.Tween(btnTH, TweenInfo.new(0.18), { TextColor3 = Color3.fromRGB(156, 163, 175) })
+            else
+                Tweener.Tween(btnTH, TweenInfo.new(0.18), { TextColor3 = Color3.fromRGB(255, 255, 255) })
+                Tweener.Tween(btnEN, TweenInfo.new(0.18), { TextColor3 = Color3.fromRGB(156, 163, 175) })
+            end
+        end
+
+        btnEN.MouseButton1Click:Connect(function() updateLangSelection("EN") end)
+        btnEN.Activated:Connect(function() updateLangSelection("EN") end)
+        btnTH.MouseButton1Click:Connect(function() updateLangSelection("TH") end)
+        btnTH.Activated:Connect(function() updateLangSelection("TH") end)
+        langBtnBox.Parent = langSlot
+
+        -- Row 2: Menu Keybind (Interactive & Rebindable)
+        local _, keySlot = createSettingRow("key", "Menu Keybind", "Hotkey to toggle interface visibility")
+        local keyBtn = Instance.new("TextButton")
+        keyBtn.Name = "KeybindButton"
+        keyBtn.Size = UDim2.new(1, 0, 0, 26)
+        keyBtn.Position = UDim2.new(0, 0, 0.5, 0)
+        keyBtn.AnchorPoint = Vector2.new(0, 0.5)
+        keyBtn.BackgroundColor3 = Color3.fromRGB(24, 20, 28)
+        keyBtn.AutoButtonColor = false
+        Theme.ApplyTypography(keyBtn, "Code", "Small")
+        local keyStr = (win and win.ToggleKey and tostring(win.ToggleKey):gsub("Enum.KeyCode.", "")) or "RightControl"
+        keyBtn.Text = keyStr
+        keyBtn.TextColor3 = Theme.GetToken("Accent")
+        local kbCorner = Instance.new("UICorner")
+        kbCorner.CornerRadius = UDim.new(0, 6)
+        kbCorner.Parent = keyBtn
+        local kbStroke = Instance.new("UIStroke")
+        kbStroke.Color = Theme.GetToken("BorderAccent")
+        kbStroke.Thickness = 1
+        kbStroke.Transparency = 0.5
+        kbStroke.Parent = keyBtn
+        Tweener.BindPressFeedback(keyBtn, keyBtn)
+
+        local isListeningKey = false
+        local keyConn = nil
+        local function startListening()
+            if isListeningKey then return end
+            isListeningKey = true
+            keyBtn.Text = "Press Key..."
+            keyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            kbStroke.Color = Color3.fromRGB(255, 255, 255)
+
+            local UserInputService = game:GetService("UserInputService")
+            keyConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+                if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode ~= Enum.KeyCode.Unknown then
+                    if keyConn then
+                        keyConn:Disconnect()
+                        keyConn = nil
+                    end
+                    isListeningKey = false
+                    local newKey = input.KeyCode
+                    if win then
+                        win.ToggleKey = newKey
+                    end
+                    keyBtn.Text = newKey.Name
+                    keyBtn.TextColor3 = Theme.GetToken("Accent")
+                    kbStroke.Color = Theme.GetToken("BorderAccent")
+                    if win and win.Notify then
+                        win:Notify({
+                            Title = "Keybind Updated",
+                            Content = "Menu hotkey set to " .. newKey.Name,
+                            Duration = 2.0,
+                            Icon = "check",
+                        })
+                    end
+                end
+            end)
+        end
+
+        keyBtn.MouseButton1Click:Connect(startListening)
+        keyBtn.Activated:Connect(startListening)
+        keyBtn.Parent = keySlot
+
+        modal.Parent = overlay
+        overlay.Parent = targetParent
+
+        -- Smooth Open Animation (Backdrop fade + Modal scale 0.90 -> 1.0)
+        Tweener.Tween(overlay, TweenInfo.new(0.20), { BackgroundTransparency = 0.50 })
+        Tweener.Tween(mScale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1.0 })
+
+        local isClosing = false
+        local function closePopup()
+            if isClosing then return end
+            isClosing = true
+            Tweener.Tween(mScale, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Scale = 0.90 })
+            Tweener.Tween(overlay, TweenInfo.new(0.18), { BackgroundTransparency = 1.0 })
+            task.delay(0.20, function()
+                overlay:Destroy()
+            end)
+        end
+
+        closeBtn.MouseButton1Click:Connect(closePopup)
+        closeBtn.Activated:Connect(closePopup)
+        overlay.MouseButton1Click:Connect(closePopup)
+        overlay.Activated:Connect(closePopup)
+    end
+
+    settingBtn.MouseButton1Click:Connect(openSettingsPopup)
+    settingBtn.Activated:Connect(openSettingsPopup)
+    settingBtn:SetAttribute("CanOpenSettings", true)
+    settingBtn.Parent = breadcrumbBar
+    breadcrumbBar.Parent = root
+
+    -- 2. Hero Row (Welcome Card with Full Avatar Background Banner + Discord Action Button Card)
+    local heroRow = Instance.new("Frame")
+    heroRow.Name = "HeroRow"
+    heroRow.Size = UDim2.new(1, 0, 0, 136)
+    heroRow.BackgroundTransparency = 1
+    heroRow.LayoutOrder = 2
+
+    -- 2A. Welcome Card (CanvasGroup strictly clips avatar background inside rounded border on resize)
+    local heroCard = Instance.new("CanvasGroup")
+    heroCard.Name = "HeroCard"
+    heroCard.Size = UDim2.new(0.61, -6, 1, 0)
+    heroCard.Position = UDim2.new(0, 0, 0, 0)
+    heroCard.BackgroundColor3 = Color3.fromRGB(18, 14, 12)
+    heroCard.BorderSizePixel = 0
+    heroCard.GroupTransparency = 0
+    heroCard.ClipsDescendants = true
+
+    local heroCorner = Instance.new("UICorner")
+    heroCorner.CornerRadius = UDim.new(0, 14)
+    heroCorner.Parent = heroCard
+
+    -- Map Background Image (Full Card Bleed with rounded corner clipping)
+    local mapBg = Instance.new("ImageLabel")
+    mapBg.Name = "MapBannerBackground"
+    mapBg.Size = UDim2.fromScale(1, 1)
+    mapBg.Position = UDim2.fromScale(0.5, 0.5)
+    mapBg.AnchorPoint = Vector2.new(0.5, 0.5)
+    mapBg.BackgroundTransparency = 1
+    mapBg.ScaleType = Enum.ScaleType.Crop -- Full card cover
+    mapBg.ClipsDescendants = true
+    mapBg.ZIndex = 1
+    mapBg.Parent = heroCard
+
+    local mapCorner = Instance.new("UICorner")
+    mapCorner.CornerRadius = UDim.new(0, 14)
+    mapCorner.Parent = mapBg
+
+    -- Fast default: load rbxthumb for GameThumbnail / GameIcon
+    local targetGameId = game.GameId
+    local targetPlaceId = game.PlaceId
+    if targetGameId and targetGameId > 0 then
+        mapBg.Image = string.format("rbxthumb://type=GameThumbnail&id=%d&w=768&h=432", targetGameId)
+    else
+        mapBg.Image = string.format("rbxthumb://type=Asset&id=%d&w=768&h=432", targetPlaceId)
+    end
+
+    -- Asynchronous fetch for high-res official IconImageAssetId
+    task.spawn(function()
+        pcall(function()
+            local MarketplaceService = game:GetService("MarketplaceService")
+            local info = MarketplaceService:GetProductInfo(targetPlaceId)
+            if info then
+                if info.IconImageAssetId and info.IconImageAssetId > 0 then
+                    if mapBg and mapBg.Parent then
+                        mapBg.Image = string.format("rbxassetid://%d", info.IconImageAssetId)
+                    end
+                end
+            end
+        end)
+    end)
+
+    -- Dark Harmonious Amber/Obsidian Gradient Overlay
+    local bgOverlay = Instance.new("Frame")
+    bgOverlay.Name = "DarkOverlay"
+    bgOverlay.Size = UDim2.fromScale(1, 1)
+    bgOverlay.Position = UDim2.fromScale(0.5, 0.5)
+    bgOverlay.AnchorPoint = Vector2.new(0.5, 0.5)
+    bgOverlay.BackgroundColor3 = Color3.fromRGB(15, 12, 10)
+    bgOverlay.BackgroundTransparency = 0.2
+    bgOverlay.BorderSizePixel = 0
+    bgOverlay.ZIndex = 2
+
+    local bgCorner = Instance.new("UICorner")
+    bgCorner.CornerRadius = UDim.new(0, 14)
+    bgCorner.Parent = bgOverlay
+
+    local ovGrad = Instance.new("UIGradient")
+    ovGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(194, 65, 12)), -- Vibrant Amber
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 12, 10)), -- Dark Obsidian
+    })
+    ovGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.35),
+        NumberSequenceKeypoint.new(1, 0.75),
+    })
+    ovGrad.Rotation = 90
+    ovGrad.Parent = bgOverlay
+    bgOverlay.Parent = heroCard
+
+    local heroStroke = Instance.new("UIStroke")
+    heroStroke.Color = Theme.GetToken("BorderAccent")
+    heroStroke.Thickness = 1
+    heroStroke.Transparency = 0.55
+    heroStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    heroStroke.ZIndex = 3
+    heroStroke.Parent = heroCard
+    Theme.Bind(heroStroke, "Color", "BorderAccent")
+
+    -- Welcome Text Stack (100% Transparent Background as requested)
+    local heroTextStack = Instance.new("Frame")
+    heroTextStack.Name = "TextStack"
+    heroTextStack.Size = UDim2.new(1, -36, 0, 36)
+    heroTextStack.Position = UDim2.new(0, 18, 1, -14)
+    heroTextStack.AnchorPoint = Vector2.new(0, 1)
+    heroTextStack.BackgroundTransparency = 1 -- Completely Transparent
+    heroTextStack.BorderSizePixel = 0
+    heroTextStack.ZIndex = 4
+    heroTextStack.Parent = heroCard
+
+    local displayName = props.Username or (lp and (lp.DisplayName or lp.Name)) or "epochzx"
+    local greetingLabel = Instance.new("TextLabel")
+    greetingLabel.Name = "Greeting"
+    greetingLabel.Size = UDim2.fromScale(1, 1)
+    greetingLabel.BackgroundTransparency = 1
+    Theme.ApplyTypography(greetingLabel, "Display")
+    greetingLabel.TextSize = 19
+    greetingLabel.TextWrapped = true
+    greetingLabel.Text = "Welcome, " .. displayName
+    greetingLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    greetingLabel.TextXAlignment = Enum.TextXAlignment.Left
+    greetingLabel.TextTruncate = Enum.TextTruncate.None
+    greetingLabel.TextStrokeTransparency = 0.6
+    greetingLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    greetingLabel.ZIndex = 5
+    greetingLabel.Parent = heroTextStack
+
+    heroCard.Parent = heroRow
+
+    -- 2B. Discord Action Button Card (Click to copy https://discord.gg/2gEjXyQWKM, no background behind icon)
+    local discordLink = "https://discord.gg/2gEjXyQWKM"
+    local actionCard = Instance.new("ImageButton")
+    actionCard.Name = "DiscordActionCard"
+    actionCard.Size = UDim2.new(0.39, -6, 1, 0)
+    actionCard.Position = UDim2.new(0.61, 6, 0, 0)
+    actionCard.BackgroundColor3 = Theme.GetToken("Card")
+    actionCard.AutoButtonColor = false
+    actionCard.BorderSizePixel = 0
+    Theme.Bind(actionCard, "BackgroundColor3", "Card")
+
+    local actionCorner = Instance.new("UICorner")
+    actionCorner.CornerRadius = UDim.new(0, 14)
+    actionCorner.Parent = actionCard
+
+    local actionStroke = Instance.new("UIStroke")
+    actionStroke.Color = Theme.GetToken("BorderSubtle")
+    actionStroke.Thickness = 1
+    actionStroke.Parent = actionCard
+    Theme.Bind(actionStroke, "Color", "BorderSubtle")
+
+    local actionPad = Instance.new("UIPadding")
+    actionPad.PaddingLeft = UDim.new(0, 16)
+    actionPad.PaddingRight = UDim.new(0, 16)
+    actionPad.PaddingTop = UDim.new(0, 14)
+    actionPad.PaddingBottom = UDim.new(0, 14)
+    actionPad.Parent = actionCard
+
+    local actionLeftCol = Instance.new("Frame")
+    actionLeftCol.Name = "LeftColumn"
+    actionLeftCol.Size = UDim2.new(1, -44, 1, 0)
+    actionLeftCol.BackgroundTransparency = 1
+    actionLeftCol.Parent = actionCard
+
+    local actionColLayout = Instance.new("UIListLayout")
+    actionColLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    actionColLayout.Padding = UDim.new(0, 2)
+    actionColLayout.Parent = actionLeftCol
+
+    local actionTitle = Instance.new("TextLabel")
+    actionTitle.Name = "Title"
+    actionTitle.Size = UDim2.new(1, 0, 0, 15)
+    actionTitle.BackgroundTransparency = 1
+    Theme.ApplyTypography(actionTitle, "Body", "Small")
+    actionTitle.Text = "Discord Community"
+    actionTitle.TextColor3 = Theme.GetToken("TextMuted")
+    actionTitle.TextXAlignment = Enum.TextXAlignment.Left
+    actionTitle.LayoutOrder = 1
+    actionTitle.Parent = actionLeftCol
+    Theme.Bind(actionTitle, "TextColor3", "TextMuted")
+
+    local discSub = Instance.new("TextLabel")
+    discSub.Name = "DiscordTitle"
+    discSub.Size = UDim2.new(1, 0, 0, 22)
+    discSub.BackgroundTransparency = 1
+    Theme.ApplyTypography(discSub, "Display")
+    discSub.TextSize = 17
+    discSub.Text = "Join Server"
+    discSub.TextColor3 = Color3.fromRGB(255, 255, 255)
+    discSub.TextXAlignment = Enum.TextXAlignment.Left
+    discSub.LayoutOrder = 2
+    discSub.Parent = actionLeftCol
+
+    local subLabel = Instance.new("TextLabel")
+    subLabel.Name = "Subtitle"
+    subLabel.Size = UDim2.new(1, 0, 0, 15)
+    subLabel.BackgroundTransparency = 1
+    Theme.ApplyTypography(subLabel, "Body", "Small")
+    subLabel.Text = "discord.gg/2gEjXyQWKM"
+    subLabel.TextColor3 = Theme.GetToken("Placeholder")
+    subLabel.TextXAlignment = Enum.TextXAlignment.Left
+    subLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    subLabel.LayoutOrder = 3
+    subLabel.Parent = actionLeftCol
+    Theme.Bind(subLabel, "TextColor3", "Placeholder")
+
+    local reviewBtn = Instance.new("TextButton")
+    reviewBtn.Name = "ReviewButton"
+    reviewBtn.Size = UDim2.new(1, 0, 0, 20)
+    reviewBtn.BackgroundTransparency = 1
+    Theme.ApplyTypography(reviewBtn, "Header", "Sub")
+    reviewBtn.Text = "Copy Link →"
+    reviewBtn.TextColor3 = Theme.GetToken("Accent")
+    reviewBtn.TextXAlignment = Enum.TextXAlignment.Left
+    reviewBtn.LayoutOrder = 4
+    reviewBtn.Parent = actionLeftCol
+    Theme.Bind(reviewBtn, "TextColor3", "Accent")
+
+    -- Right Illustration: Discord Icon floating cleanly with NO background box
+    local mailIcon = Instance.new("ImageLabel")
+    mailIcon.Name = "DiscordIcon"
+    mailIcon.Size = UDim2.fromOffset(30, 30)
+    mailIcon.Position = UDim2.new(1, 0, 0.5, 0)
+    mailIcon.AnchorPoint = Vector2.new(1, 0.5)
+    mailIcon.BackgroundTransparency = 1
+    mailIcon.ImageColor3 = Theme.GetToken("Accent")
+    Icons.Apply(mailIcon, "send")
+    mailIcon.Parent = actionCard
+    Theme.Bind(mailIcon, "ImageColor3", "Accent")
+
+    -- Unified scale press feedback for entire card and inner content
+    Tweener.BindPressFeedback(actionCard, actionCard, 0.96)
+
+    -- Interactive micro-hover on link button
+    reviewBtn.MouseEnter:Connect(function()
+        Tweener.Tween(reviewBtn, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(0, 4, 0, 0) })
+    end)
+    reviewBtn.MouseLeave:Connect(function()
+        Tweener.Tween(reviewBtn, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(0, 0, 0, 0) })
+    end)
+
+    -- Dynamic click animation across entire card (live feedback instead of static text)
+    local isCopyingAnim = false
+    local function copyDiscord()
+        local ok = false
+        pcall(function()
+            ok = Compat.CopyText(discordLink)
+        end)
+        local win = self.Window
+        if win and win.Notify then
+            win:Notify({
+                Title = "Discord Link",
+                Content = "Copied " .. discordLink .. " to clipboard!",
+                Duration = 2.5,
+                Icon = "check",
+            })
+        end
+
+        -- Animated card reaction on click
+        if not isCopyingAnim then
+            isCopyingAnim = true
+            reviewBtn.Text = "Copied! ✓"
+            reviewBtn.TextColor3 = Color3.fromRGB(34, 197, 94) -- Vibrant Green Success
+            subLabel.Text = "Link copied to clipboard!"
+            subLabel.TextColor3 = Theme.GetToken("Accent")
+            Tweener.Tween(mailIcon, TweenInfo.new(0.20, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Rotation = -15, Size = UDim2.fromOffset(34, 34) })
+            task.delay(2.0, function()
+                reviewBtn.Text = "Copy Link →"
+                reviewBtn.TextColor3 = Theme.GetToken("Accent")
+                subLabel.Text = "discord.gg/2gEjXyQWKM"
+                subLabel.TextColor3 = Theme.GetToken("Placeholder")
+                Tweener.Tween(mailIcon, TweenInfo.new(0.20, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Rotation = 0, Size = UDim2.fromOffset(30, 30) })
+                isCopyingAnim = false
+            end)
+        end
+    end
+
+    actionCard.Activated:Connect(copyDiscord)
+    reviewBtn.MouseButton1Click:Connect(copyDiscord)
+    actionCard.Parent = heroRow
+    heroRow.Parent = root
+
+    -- 3. Metrics Row (3 Stat Cards: Execute Time, Players Ingame, Whitelist - Amber Theme)
+    local statsRow = Instance.new("Frame")
+    statsRow.Name = "StatsRow"
+    statsRow.Size = UDim2.new(1, 0, 0, 80)
+    statsRow.BackgroundTransparency = 1
+    statsRow.LayoutOrder = 3
+
+    local statsLayout = Instance.new("UIListLayout")
+    statsLayout.FillDirection = Enum.FillDirection.Horizontal
+    statsLayout.Padding = UDim.new(0, 12)
+    statsLayout.Parent = statsRow
+
+    local function createStatCard(name: string, iconName: string, titleText: string, valueStr: string, isCompactText: boolean?, order: number?): (Frame, TextLabel)
+        local card = Instance.new("Frame")
+        card.Name = name
+        card.Size = UDim2.new(0.333, -8, 1, 0)
+        card.LayoutOrder = order or 1
+        card.BackgroundColor3 = Theme.GetToken("Card")
+        card.BorderSizePixel = 0
+        Theme.Bind(card, "BackgroundColor3", "Card")
+
+        local cCorner = Instance.new("UICorner")
+        cCorner.CornerRadius = UDim.new(0, 14)
+        cCorner.Parent = card
+
+        local cStroke = Instance.new("UIStroke")
+        cStroke.Color = Theme.GetToken("BorderSubtle")
+        cStroke.Thickness = 1
+        cStroke.Parent = card
+        Theme.Bind(cStroke, "Color", "BorderSubtle")
+
+        local cardPad = Instance.new("UIPadding")
+        cardPad.PaddingLeft = UDim.new(0, 12)
+        cardPad.PaddingRight = UDim.new(0, 10)
+        cardPad.Parent = card
+
+        -- Icon Square Box (Deep Amber, Centered 38x38)
+        local iconBox = Instance.new("Frame")
+        iconBox.Name = "IconBox"
+        iconBox.Size = UDim2.fromOffset(38, 38)
+        iconBox.Position = UDim2.new(0, 0, 0.5, 0)
+        iconBox.AnchorPoint = Vector2.new(0, 0.5)
+        iconBox.BackgroundColor3 = Color3.fromRGB(36, 20, 10)
+        iconBox.BorderSizePixel = 0
+        local ibCorner = Instance.new("UICorner")
+        ibCorner.CornerRadius = UDim.new(0, 10)
+        ibCorner.Parent = iconBox
+
+        local ic = Instance.new("ImageLabel")
+        ic.Size = UDim2.fromOffset(20, 20)
+        ic.Position = UDim2.fromScale(0.5, 0.5)
+        ic.AnchorPoint = Vector2.new(0.5, 0.5)
+        ic.BackgroundTransparency = 1
+        ic.ImageColor3 = Theme.GetToken("Accent")
+        Icons.Apply(ic, iconName)
+        ic.Parent = iconBox
+        Theme.Bind(ic, "ImageColor3", "Accent")
+        iconBox.Parent = card
+
+        -- Text Column (Locked to exact height 38px matching iconBox, top is perfectly flush with icon top)
+        local textCol = Instance.new("Frame")
+        textCol.Name = "TextColumn"
+        textCol.Size = UDim2.new(1, -48, 0, 38)
+        textCol.Position = UDim2.new(0, 48, 0.5, 0)
+        textCol.AnchorPoint = Vector2.new(0, 0.5)
+        textCol.BackgroundTransparency = 1
+        textCol.Parent = card
+
+        local tLayout = Instance.new("UIListLayout")
+        tLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        tLayout.VerticalAlignment = Enum.VerticalAlignment.Top -- Locked to icon top boundary
+        tLayout.Padding = UDim.new(0, 2)
+        tLayout.Parent = textCol
+
+        local tLabel = Instance.new("TextLabel")
+        tLabel.Name = "Title"
+        tLabel.Size = UDim2.new(1, 0, 0, 14)
+        tLabel.BackgroundTransparency = 1
+        Theme.ApplyTypography(tLabel, "Header", "Small")
+        tLabel.TextSize = 12
+        tLabel.Text = titleText
+        tLabel.TextColor3 = Color3.fromRGB(156, 163, 175)
+        tLabel.TextXAlignment = Enum.TextXAlignment.Left
+        tLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        tLabel.LayoutOrder = 1
+        tLabel.Parent = textCol
+
+        local valLabel = Instance.new("TextLabel")
+        valLabel.Name = "Value"
+        valLabel.Size = UDim2.new(1, 0, 0, 22)
+        valLabel.BackgroundTransparency = 1
+        if isCompactText then
+            Theme.ApplyTypography(valLabel, "Header", "Small")
+            valLabel.TextSize = 13
+            valLabel.TextWrapped = true
+            valLabel.TextTruncate = Enum.TextTruncate.None
+        else
+            Theme.ApplyTypography(valLabel, "Display")
+            valLabel.TextSize = 19
+            valLabel.TextTruncate = Enum.TextTruncate.None
+        end
+        valLabel.Text = valueStr
+        valLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        valLabel.TextXAlignment = Enum.TextXAlignment.Left
+        valLabel.LayoutOrder = 2
+        valLabel.Parent = textCol
+
+        card.Parent = statsRow
+        return card, valLabel
+    end
+
+    -- Card 1: Execute Time (Timer since script execution, e.g. 0days 0hr 1min 24sec)
+    local cardExecuteTime, valExecuteTime = createStatCard("ExecuteTimeCard", "clock", "Execute Time", "0hr 0min 0sec", true, 1)
+
+    -- Card 2: Players Ingame (users_in_server / max_server, e.g. 22/50)
+    local initialPlayerCount = math.max(22, #Players:GetPlayers())
+    local maxPlayerLimit = math.max(50, Players.MaxPlayers)
+    local cardPlayers, valPlayers = createStatCard("PlayersCard", "users", "Players Ingame", string.format("%d/%d", initialPlayerCount, maxPlayerLimit), false, 2)
+
+    -- Card 3: Whitelist (Check Junkie key / expiry, display days, hours, minutes, seconds)
+    local cardWhitelist, valWhitelist = createStatCard("WhitelistCard", "shield-check", "Whitelist", "29days 12hr 39min 20sec", true, 3)
+
+    statsRow.Parent = root
+
+    -- 4. Filter & Search Controls Row (Support count pill, Status dropdown, Search box)
+    local ctrlRow = Instance.new("Frame")
+    ctrlRow.Name = "ControlsRow"
+    ctrlRow.Size = UDim2.new(1, 0, 0, 34)
+    ctrlRow.BackgroundTransparency = 1
+    ctrlRow.LayoutOrder = 4
+
+    local leftFilters = Instance.new("Frame")
+    leftFilters.Name = "LeftFilters"
+    leftFilters.Size = UDim2.new(1, -195, 1, 0)
+    leftFilters.BackgroundTransparency = 1
+    leftFilters.Parent = ctrlRow
+
+    local lfLayout = Instance.new("UIListLayout")
+    lfLayout.FillDirection = Enum.FillDirection.Horizontal
+    lfLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    lfLayout.Padding = UDim.new(0, 8)
+    lfLayout.Parent = leftFilters
+
+    -- Support (countmap) pill
+    local supportPill = Instance.new("TextButton")
+    supportPill.Name = "Pill_Support"
+    supportPill.AutomaticSize = Enum.AutomaticSize.X
+    supportPill.Size = UDim2.new(0, 0, 1, 0)
+    supportPill.BackgroundColor3 = Color3.fromRGB(194, 65, 12)
+    supportPill.AutoButtonColor = false
+    Theme.ApplyTypography(supportPill, "Header", "Sub")
+    supportPill.Text = "Support (0)"
+    supportPill.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+    local spCorner = Instance.new("UICorner")
+    spCorner.CornerRadius = UDim.new(0, 8)
+    spCorner.Parent = supportPill
+
+    local spStroke = Instance.new("UIStroke")
+    spStroke.Color = Theme.GetToken("BorderAccent")
+    spStroke.Thickness = 1
+    spStroke.Parent = supportPill
+
+    local spPad = Instance.new("UIPadding")
+    spPad.PaddingLeft = UDim.new(0, 12)
+    spPad.PaddingRight = UDim.new(0, 12)
+    spPad.Parent = supportPill
+    supportPill.Parent = leftFilters
+
+    -- Status Filter Dropdown Trigger (Engineered to match real Dropdown component)
+    local currentStatusFilter = "All"
+    local statusDropdownBtn = Instance.new("TextButton")
+    statusDropdownBtn.Name = "StatusDropdownTrigger"
+    statusDropdownBtn.Size = UDim2.fromOffset(138, 32)
+    statusDropdownBtn.BackgroundColor3 = Theme.GetToken("Card")
+    statusDropdownBtn.AutoButtonColor = false
+    statusDropdownBtn.BorderSizePixel = 0
+    statusDropdownBtn.Text = ""
+    Theme.Bind(statusDropdownBtn, "BackgroundColor3", "Card")
+
+    local sdbCorner = Instance.new("UICorner")
+    sdbCorner.CornerRadius = Theme.Radii.Control
+    sdbCorner.Parent = statusDropdownBtn
+
+    local sdbStroke = Instance.new("UIStroke")
+    sdbStroke.Color = Theme.GetToken("BorderSubtle")
+    sdbStroke.Thickness = 1
+    sdbStroke.Parent = statusDropdownBtn
+    Theme.Bind(sdbStroke, "Color", "BorderSubtle")
+
+    local sdbPad = Instance.new("UIPadding")
+    sdbPad.PaddingLeft = UDim.new(0, 10)
+    sdbPad.PaddingRight = UDim.new(0, 10)
+    sdbPad.Parent = statusDropdownBtn
+
+    local sdbDot = Instance.new("Frame")
+    sdbDot.Name = "LeadingDot"
+    sdbDot.Size = UDim2.fromOffset(8, 8)
+    sdbDot.Position = UDim2.new(0, 0, 0.5, 0)
+    sdbDot.AnchorPoint = Vector2.new(0, 0.5)
+    sdbDot.BackgroundColor3 = Color3.fromRGB(156, 163, 175)
+    sdbDot.BorderSizePixel = 0
+    local sdbdCorner = Instance.new("UICorner")
+    sdbdCorner.CornerRadius = UDim.new(1, 0)
+    sdbdCorner.Parent = sdbDot
+    sdbDot.Parent = statusDropdownBtn
+
+    local sdbText = Instance.new("TextLabel")
+    sdbText.Name = "StatusLabel"
+    sdbText.Size = UDim2.new(1, -26, 1, 0)
+    sdbText.Position = UDim2.new(0, 14, 0, 0)
+    sdbText.BackgroundTransparency = 1
+    Theme.ApplyTypography(sdbText, "Body", "Small")
+    sdbText.Text = "All Status"
+    sdbText.TextColor3 = Color3.fromRGB(220, 220, 230)
+    sdbText.TextXAlignment = Enum.TextXAlignment.Left
+    sdbText.TextTruncate = Enum.TextTruncate.AtEnd
+    sdbText.Parent = statusDropdownBtn
+
+    local sdbArrow = Instance.new("ImageLabel")
+    sdbArrow.Name = "Arrow"
+    sdbArrow.Size = UDim2.fromOffset(13, 13)
+    sdbArrow.Position = UDim2.new(1, 0, 0.5, 0)
+    sdbArrow.AnchorPoint = Vector2.new(1, 0.5)
+    sdbArrow.BackgroundTransparency = 1
+    sdbArrow.ImageColor3 = Theme.GetToken("Accent")
+    Icons.Apply(sdbArrow, "chevron-down")
+    sdbArrow.Parent = statusDropdownBtn
+    Theme.Bind(sdbArrow, "ImageColor3", "Accent")
+    statusDropdownBtn.Parent = leftFilters
+    Tweener.BindPressFeedback(statusDropdownBtn, statusDropdownBtn)
+
+    -- Status Dropdown Popover Menu (Matches Dropdown.luau with ZIndex 4500 and Fluid animation)
+    local statusPopover = Instance.new("Frame")
+    statusPopover.Name = "StatusPopover"
+    statusPopover.Size = UDim2.fromOffset(150, 0)
+    statusPopover.BackgroundColor3 = Theme.GetToken("Card")
+    statusPopover.BorderSizePixel = 0
+    statusPopover.ZIndex = 4500
+    statusPopover.Visible = false
+    statusPopover.ClipsDescendants = true
+    Theme.Bind(statusPopover, "BackgroundColor3", "Card")
+
+    local spPopCorner = Instance.new("UICorner")
+    spPopCorner.CornerRadius = Theme.Radii.Card
+    spPopCorner.Parent = statusPopover
+
+    local spPopStroke = Instance.new("UIStroke")
+    spPopStroke.Color = Theme.GetToken("BorderAccent")
+    spPopStroke.Thickness = 1
+    spPopStroke.Transparency = 0.4
+    spPopStroke.Parent = statusPopover
+    Theme.Bind(spPopStroke, "Color", "BorderAccent")
+
+    local spPopList = Instance.new("UIListLayout")
+    spPopList.SortOrder = Enum.SortOrder.LayoutOrder
+    spPopList.Padding = UDim.new(0, 3)
+    spPopList.Parent = statusPopover
+
+    local spPopPad = Instance.new("UIPadding")
+    spPopPad.PaddingTop = UDim.new(0, 6)
+    spPopPad.PaddingBottom = UDim.new(0, 6)
+    spPopPad.PaddingLeft = UDim.new(0, 6)
+    spPopPad.PaddingRight = UDim.new(0, 6)
+    spPopPad.Parent = statusPopover
+
+    -- Search Input Field
+    local searchFrame = Instance.new("Frame")
+    searchFrame.Name = "SearchFrame"
+    searchFrame.Size = UDim2.new(0, 185, 1, 0)
+    searchFrame.Position = UDim2.new(1, 0, 0.5, 0)
+    searchFrame.AnchorPoint = Vector2.new(1, 0.5)
+    searchFrame.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
+    searchFrame.BorderSizePixel = 0
+
+    local sfCorner = Instance.new("UICorner")
+    sfCorner.CornerRadius = UDim.new(0, 8)
+    sfCorner.Parent = searchFrame
+
+    local sfStroke = Instance.new("UIStroke")
+    sfStroke.Color = Theme.GetToken("BorderSubtle")
+    sfStroke.Thickness = 1
+    sfStroke.Parent = searchFrame
+    Theme.Bind(sfStroke, "Color", "BorderSubtle")
+
+    local sIcon = Instance.new("ImageLabel")
+    sIcon.Name = "SearchIcon"
+    sIcon.Size = UDim2.fromOffset(14, 14)
+    sIcon.Position = UDim2.new(0, 10, 0.5, 0)
+    sIcon.AnchorPoint = Vector2.new(0, 0.5)
+    sIcon.BackgroundTransparency = 1
+    sIcon.ImageColor3 = Color3.fromRGB(100, 100, 120)
+    Icons.Apply(sIcon, "search")
+    sIcon.Parent = searchFrame
+
+    local sInput = Instance.new("TextBox")
+    sInput.Name = "SearchInput"
+    sInput.Size = UDim2.new(1, -34, 1, 0)
+    sInput.Position = UDim2.new(0, 28, 0, 0)
+    sInput.BackgroundTransparency = 1
+    Theme.ApplyTypography(sInput, "Body", "Small")
+    sInput.PlaceholderText = "Search for a map..."
+    sInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 120)
+    sInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+    sInput.TextXAlignment = Enum.TextXAlignment.Left
+    sInput.ClearTextOnFocus = false
+    sInput.Text = ""
+    sInput.Parent = searchFrame
+
+    searchFrame.Parent = ctrlRow
+    ctrlRow.Parent = root
+
+    -- 5. Map Manager Table Card (Separate container card with 14px corners and subtle border)
+    local mapCard = Instance.new("Frame")
+    mapCard.Name = "MapManagerCard"
+    mapCard.Size = UDim2.new(1, 0, 0, 0)
+    mapCard.AutomaticSize = Enum.AutomaticSize.Y
+    mapCard.BackgroundColor3 = Theme.GetToken("Card")
+    mapCard.BorderSizePixel = 0
+    mapCard.LayoutOrder = 5
+    Theme.Bind(mapCard, "BackgroundColor3", "Card")
+
+    local mcCorner = Instance.new("UICorner")
+    mcCorner.CornerRadius = UDim.new(0, 14)
+    mcCorner.Parent = mapCard
+
+    local mcStroke = Instance.new("UIStroke")
+    mcStroke.Color = Theme.GetToken("BorderSubtle")
+    mcStroke.Thickness = 1
+    mcStroke.Parent = mapCard
+    Theme.Bind(mcStroke, "Color", "BorderSubtle")
+
+    local mcPad = Instance.new("UIPadding")
+    mcPad.PaddingTop = UDim.new(0, 10)
+    mcPad.PaddingBottom = UDim.new(0, 10)
+    mcPad.PaddingLeft = UDim.new(0, 14)
+    mcPad.PaddingRight = UDim.new(0, 14)
+    mcPad.Parent = mapCard
+
+    local tableLayout = Instance.new("UIListLayout")
+    tableLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    tableLayout.Padding = UDim.new(0, 6)
+    tableLayout.Parent = mapCard
+
+    -- Table Header Row: Map | Place ID | Update | Status | Actions
+    local headerRow = Instance.new("Frame")
+    headerRow.Name = "TableHeader"
+    headerRow.Size = UDim2.new(1, 0, 0, 26)
+    headerRow.BackgroundTransparency = 1
+    headerRow.LayoutOrder = 0
+
+    local function createColHeader(title: string, xPos: number, width: number, alignRight: boolean?): TextLabel
+        local h = Instance.new("TextLabel")
+        h.Name = "Header_" .. title
+        h.Size = UDim2.new(width, 0, 1, 0)
+        h.Position = UDim2.new(xPos, 0, 0, 0)
+        h.BackgroundTransparency = 1
+        Theme.ApplyTypography(h, "Body", "Small")
+        h.Text = title
+        h.TextColor3 = Color3.fromRGB(120, 120, 135)
+        h.TextXAlignment = if alignRight then Enum.TextXAlignment.Right else Enum.TextXAlignment.Left
+        h.Parent = headerRow
+        return h
+    end
+
+    createColHeader("Map", 0.01, 0.38)
+    createColHeader("Place ID", 0.40, 0.24)
+    createColHeader("Update", 0.66, 0.16)
+    createColHeader("Status", 0.84, 0.15)
+    headerRow.Parent = mapCard
+
+    -- Rows Container
+    local rowsHolder = Instance.new("Frame")
+    rowsHolder.Name = "RowsHolder"
+    rowsHolder.Size = UDim2.new(1, 0, 0, 0)
+    rowsHolder.AutomaticSize = Enum.AutomaticSize.Y
+    rowsHolder.BackgroundTransparency = 1
+    rowsHolder.LayoutOrder = 1
+
+    local rhLayout = Instance.new("UIListLayout")
+    rhLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    rhLayout.Padding = UDim.new(0, 5)
+    rhLayout.Parent = rowsHolder
+    rowsHolder.Parent = mapCard
+
+    -- Slide Navigation Footer (Shows slide controls when maps exist)
+    local slideFooter = Instance.new("Frame")
+    slideFooter.Name = "SlideFooter"
+    slideFooter.Size = UDim2.new(1, 0, 0, 32)
+    slideFooter.BackgroundTransparency = 1
+    slideFooter.LayoutOrder = 2
+    slideFooter.Parent = mapCard
+
+    local sfDivider = Instance.new("Frame")
+    sfDivider.Name = "FooterDivider"
+    sfDivider.Size = UDim2.new(1, 0, 0, 1)
+    sfDivider.Position = UDim2.new(0, 0, 0, 0)
+    sfDivider.BackgroundColor3 = Theme.GetToken("BorderSubtle")
+    sfDivider.BorderSizePixel = 0
+    sfDivider.Parent = slideFooter
+    Theme.Bind(sfDivider, "BackgroundColor3", "BorderSubtle")
+
+    local slideCountLabel = Instance.new("TextLabel")
+    slideCountLabel.Name = "CountLabel"
+    slideCountLabel.Size = UDim2.new(0.5, 0, 1, 0)
+    slideCountLabel.Position = UDim2.new(0, 4, 0, 0)
+    slideCountLabel.BackgroundTransparency = 1
+    Theme.ApplyTypography(slideCountLabel, "Body", "Small")
+    slideCountLabel.Text = "Showing 1-5 of 5 maps"
+    slideCountLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
+    slideCountLabel.TextXAlignment = Enum.TextXAlignment.Left
+    slideCountLabel.Parent = slideFooter
+
+    local slideNavControls = Instance.new("Frame")
+    slideNavControls.Name = "NavControls"
+    slideNavControls.Size = UDim2.new(0, 130, 1, 0)
+    slideNavControls.Position = UDim2.new(1, -4, 0, 0)
+    slideNavControls.AnchorPoint = Vector2.new(1, 0)
+    slideNavControls.BackgroundTransparency = 1
+    slideNavControls.Parent = slideFooter
+
+    local sncLayout = Instance.new("UIListLayout")
+    sncLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    sncLayout.FillDirection = Enum.FillDirection.Horizontal
+    sncLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    sncLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+    sncLayout.Padding = UDim.new(0, 6)
+    sncLayout.Parent = slideNavControls
+
+    local prevSlideBtn = Instance.new("ImageButton")
+    prevSlideBtn.Name = "PrevButton"
+    prevSlideBtn.LayoutOrder = 1 -- Leftmost: <
+    prevSlideBtn.Size = UDim2.fromOffset(26, 26)
+    prevSlideBtn.BackgroundColor3 = Color3.fromRGB(24, 20, 28)
+    prevSlideBtn.AutoButtonColor = false
+    local psbCorner = Instance.new("UICorner")
+    psbCorner.CornerRadius = UDim.new(0, 6)
+    psbCorner.Parent = prevSlideBtn
+    local prevIcon = Instance.new("ImageLabel")
+    prevIcon.Size = UDim2.fromOffset(13, 13)
+    prevIcon.Position = UDim2.fromScale(0.5, 0.5)
+    prevIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    prevIcon.BackgroundTransparency = 1
+    prevIcon.ImageColor3 = Theme.GetToken("Accent")
+    Icons.Apply(prevIcon, "chevron-left")
+    prevIcon.Parent = prevSlideBtn
+    prevSlideBtn.Parent = slideNavControls
+    Tweener.BindPressFeedback(prevSlideBtn, prevSlideBtn)
+
+    local slidePill = Instance.new("Frame")
+    slidePill.Name = "SlidePill"
+    slidePill.LayoutOrder = 2 -- Middle: 1 / 1
+    slidePill.Size = UDim2.fromOffset(48, 24)
+    slidePill.BackgroundColor3 = Color3.fromRGB(20, 16, 24)
+    local spCorner2 = Instance.new("UICorner")
+    spCorner2.CornerRadius = UDim.new(0, 6)
+    spCorner2.Parent = slidePill
+    local slidePillLabel = Instance.new("TextLabel")
+    slidePillLabel.Size = UDim2.fromScale(1, 1)
+    slidePillLabel.BackgroundTransparency = 1
+    Theme.ApplyTypography(slidePillLabel, "Code", "Small")
+    slidePillLabel.Text = "1 / 1"
+    slidePillLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    slidePillLabel.Parent = slidePill
+    slidePill.Parent = slideNavControls
+
+    local nextSlideBtn = Instance.new("ImageButton")
+    nextSlideBtn.Name = "NextButton"
+    nextSlideBtn.LayoutOrder = 3 -- Rightmost: >
+    nextSlideBtn.Size = UDim2.fromOffset(26, 26)
+    nextSlideBtn.BackgroundColor3 = Color3.fromRGB(24, 20, 28)
+    nextSlideBtn.AutoButtonColor = false
+    local nsbCorner = Instance.new("UICorner")
+    nsbCorner.CornerRadius = UDim.new(0, 6)
+    nsbCorner.Parent = nextSlideBtn
+    local nextIcon = Instance.new("ImageLabel")
+    nextIcon.Size = UDim2.fromOffset(13, 13)
+    nextIcon.Position = UDim2.fromScale(0.5, 0.5)
+    nextIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    nextIcon.BackgroundTransparency = 1
+    nextIcon.ImageColor3 = Theme.GetToken("Accent")
+    Icons.Apply(nextIcon, "chevron-right")
+    nextIcon.Parent = nextSlideBtn
+    nextSlideBtn.Parent = slideNavControls
+    Tweener.BindPressFeedback(nextSlideBtn, nextSlideBtn)
+
+    mapCard.Parent = root
+
+    -- Fallback Supported Maps Data
+    local defaultMapList = {
+        {
+            Name = "Anime Legacy Simulator",
+            PlaceId = 106198175232796,
+            GameId = 10765902945,
+            Status = "Online",
+            Icon = "rbxassetid://101140974524547",
+        },
+        {
+            Name = "Blox Fruits",
+            PlaceId = 2753915549,
+            GameId = 994732206,
+            Status = "Online",
+            Icon = "rbxthumb://type=GameIcon&id=994732206&w=150&h=150",
+        },
+        {
+            Name = "King Legacy",
+            PlaceId = 4520749081,
+            GameId = 1542456453,
+            Status = "Update",
+            Icon = "rbxthumb://type=GameIcon&id=1542456453&w=150&h=150",
+        },
+        {
+            Name = "Anime Vanguards",
+            PlaceId = 16146832113,
+            GameId = 5576288301,
+            Status = "Risk",
+            Icon = "rbxthumb://type=GameIcon&id=5576288301&w=150&h=150",
+        },
+        {
+            Name = "Fisch",
+            PlaceId = 16732694052,
+            GameId = 5750914919,
+            Status = "Online",
+            Icon = "rbxthumb://type=GameIcon&id=5750914919&w=150&h=150",
+        },
+    }
+
+    local activeMapList = defaultMapList
+    local createdRowFrames = {}
+
+    -- Function to format date string from timestamp (e.g. 10/11/2026)
+    local function formatUpdateDate(updatedStr: any): string
+        if type(updatedStr) == "string" and updatedStr ~= "" then
+            local y, m, d = string.match(updatedStr, "(%d%d%d%d)%-(%d%d)%-(%d%d)")
+            if d and m and y then
+                return string.format("%s/%s/%s", d, m, y)
+            end
+        end
+        return os.date("%d/%m/%Y")
+    end
+
+    -- Fast, Universal Place ID Resolver & Image URI Builder
+    -- Supports: Full roblox.com URL, numeric PlaceId, rbxassetid, rbxthumb, or direct asset URI
+    local function parsePlaceIdAndIcon(entry: any): (number, string)
+        local rawIcon = entry.Icon or entry.Url or entry.Link or ""
+        local rawPlaceId = entry.PlaceId or entry.PlaceID or entry.Id or entry.id
+
+        local placeIdNum = 0
+        if type(rawPlaceId) == "number" then
+            placeIdNum = rawPlaceId
+        elseif type(rawPlaceId) == "string" and tonumber(rawPlaceId) then
+            placeIdNum = tonumber(rawPlaceId) or 0
+        end
+
+        -- Extract PlaceId from Roblox game URL if PlaceId wasn't explicitly supplied
+        if placeIdNum == 0 and type(rawIcon) == "string" then
+            local matchedId = string.match(rawIcon, "games/(%d+)") or string.match(rawIcon, "roblox%.com/asset/%?id=(%d+)") or string.match(rawIcon, "(%d+)")
+            if matchedId then
+                placeIdNum = tonumber(matchedId) or 0
+            end
+        end
+
+        -- Generate instantaneous, zero-overhead Roblox native thumbnail URI
+        local imageUri = ""
+        if type(rawIcon) == "string" and (string.find(rawIcon, "rbxthumb://") or string.find(rawIcon, "rbxassetid://") or string.find(rawIcon, "http")) and not string.find(rawIcon, "roblox%.com/games/") then
+            imageUri = rawIcon
+        elseif placeIdNum > 0 then
+            imageUri = string.format("rbxthumb://type=Asset&id=%d&w=150&h=150", placeIdNum)
+        end
+
+        return placeIdNum, imageUri
+    end
+
+    -- Status Resolver: Online (Green), Update (Orange), Risk (Red)
+    local function resolveStatus(rawStatus: any): (string, Color3)
+        local s = string.lower(tostring(rawStatus or "online"))
+        if s:find("risk") or s:find("maint") or s:find("down") or s:find("red") or s:find("patch") then
+            return "Risk", Color3.fromRGB(239, 68, 68) -- Red
+        elseif s:find("update") or s:find("updat") or s:find("warn") or s:find("orange") or s:find("test") then
+            return "Update", Color3.fromRGB(249, 115, 22) -- Orange
+        else
+            return "Online", Color3.fromRGB(34, 197, 94) -- Green
+        end
+    end
+
+    local MAPS_PER_SLIDE = 5
+    local currentSlide = 1
+    local lastFilteredCount = 0
+
+    -- Rebuild Table Rows: exactly 5 maps per slide, zero overlap between Place ID and Update
+    local function rebuildMapTable()
+        for _, obj in ipairs(rowsHolder:GetChildren()) do
+            if obj:IsA("Frame") then obj:Destroy() end
+        end
+        table.clear(createdRowFrames)
+
+        -- 1. Filter all entries first
+        local query = string.lower(sInput.Text or "")
+        local filtered = {}
+        for _, mData in ipairs(activeMapList) do
+            local pidNum, _ = parsePlaceIdAndIcon(mData)
+            local matchesQuery = (query == "")
+                or (string.find(string.lower(tostring(mData.Name or "")), query, 1, true) ~= nil)
+                or (string.find(string.lower(tostring(pidNum > 0 and pidNum or mData.PlaceId or "")), query, 1, true) ~= nil)
+
+            local statusLabel, _ = resolveStatus(mData.Status)
+            local matchesStatus = true
+            if currentStatusFilter ~= "All" then
+                matchesStatus = (statusLabel == currentStatusFilter)
+            end
+
+            if matchesQuery and matchesStatus then
+                table.insert(filtered, mData)
+            end
+        end
+
+        local totalFiltered = #filtered
+        lastFilteredCount = totalFiltered
+        local totalSlides = math.max(1, math.ceil(totalFiltered / MAPS_PER_SLIDE))
+        currentSlide = math.clamp(currentSlide, 1, totalSlides)
+
+        supportPill.Text = string.format("Support (%d)", #activeMapList)
+
+        -- Update slide footer info
+        if totalFiltered > 0 then
+            local startNum = (currentSlide - 1) * MAPS_PER_SLIDE + 1
+            local endNum = math.min(totalFiltered, currentSlide * MAPS_PER_SLIDE)
+            slideCountLabel.Text = string.format("Showing %d-%d of %d maps", startNum, endNum, totalFiltered)
+            slidePillLabel.Text = string.format("%d / %d", currentSlide, totalSlides)
+        else
+            slideCountLabel.Text = "No maps found"
+            slidePillLabel.Text = "1 / 1"
+        end
+
+        prevSlideBtn.BackgroundTransparency = if currentSlide <= 1 then 0.75 else 0
+        prevSlideBtn.AutoButtonColor = (currentSlide > 1)
+        nextSlideBtn.BackgroundTransparency = if currentSlide >= totalSlides then 0.75 else 0
+        nextSlideBtn.AutoButtonColor = (currentSlide < totalSlides)
+
+        -- 2. Render only the 5 maps on the current slide
+        local startIdx = (currentSlide - 1) * MAPS_PER_SLIDE + 1
+        local endIdx = math.min(totalFiltered, currentSlide * MAPS_PER_SLIDE)
+
+        for idx = startIdx, endIdx do
+            local mData = filtered[idx]
+            local placeIdNum, initialIcon = parsePlaceIdAndIcon(mData)
+            local row = Instance.new("Frame")
+            row.Name = "Row_" .. tostring(placeIdNum > 0 and placeIdNum or idx)
+            row.Size = UDim2.new(1, 0, 0, 50)
+            row.BackgroundColor3 = Color3.fromRGB(15, 14, 20)
+            row.BackgroundTransparency = 0.4
+            row.BorderSizePixel = 0
+            row.LayoutOrder = idx
+
+            local rCorner = Instance.new("UICorner")
+            rCorner.CornerRadius = UDim.new(0, 8)
+            rCorner.Parent = row
+
+            local rStroke = Instance.new("UIStroke")
+            rStroke.Color = Color3.fromRGB(28, 25, 36)
+            rStroke.Thickness = 1
+            rStroke.Transparency = 0.5
+            rStroke.Parent = row
+
+            -- 1. Map Column (Full Map Artwork + Name) - 38% width
+            local mCol = Instance.new("Frame")
+            mCol.Name = "MapColumn"
+            mCol.Size = UDim2.new(0.38, 0, 1, 0)
+            mCol.Position = UDim2.new(0.01, 0, 0, 0)
+            mCol.BackgroundTransparency = 1
+            mCol.Parent = row
+
+            local mapArtwork = Instance.new("ImageLabel")
+            mapArtwork.Name = "AvatarUser"
+            mapArtwork.Size = UDim2.fromOffset(40, 40)
+            mapArtwork.Position = UDim2.new(0, 4, 0.5, 0)
+            mapArtwork.AnchorPoint = Vector2.new(0, 0.5)
+            mapArtwork.BackgroundColor3 = Color3.fromRGB(24, 20, 28)
+            mapArtwork.BorderSizePixel = 0
+            mapArtwork.ScaleType = Enum.ScaleType.Crop
+            mapArtwork.ClipsDescendants = true
+            local maCorner = Instance.new("UICorner")
+            maCorner.CornerRadius = UDim.new(0, 8)
+            maCorner.Parent = mapArtwork
+
+            mapArtwork.Image = initialIcon
+            mapArtwork.Parent = mCol
+
+            local nameCol = Instance.new("Frame")
+            nameCol.Name = "NameCol"
+            nameCol.Size = UDim2.new(1, -54, 0, 36)
+            nameCol.Position = UDim2.new(0, 50, 0.5, 0)
+            nameCol.AnchorPoint = Vector2.new(0, 0.5)
+            nameCol.BackgroundTransparency = 1
+            nameCol.Parent = mCol
+
+            local ncLayout = Instance.new("UIListLayout")
+            ncLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            ncLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+            ncLayout.Padding = UDim.new(0, 1)
+            ncLayout.Parent = nameCol
+
+            local mapTitle = Instance.new("TextLabel")
+            mapTitle.Name = "MapName"
+            mapTitle.Size = UDim2.new(1, 0, 0, 18)
+            mapTitle.BackgroundTransparency = 1
+            Theme.ApplyTypography(mapTitle, "Header", "Header")
+            mapTitle.Text = mData.Name or "Unknown Map"
+            mapTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+            mapTitle.TextXAlignment = Enum.TextXAlignment.Left
+            mapTitle.TextTruncate = Enum.TextTruncate.AtEnd
+            mapTitle.LayoutOrder = 1
+            mapTitle.Parent = nameCol
+
+            local subPlace = Instance.new("TextLabel")
+            subPlace.Name = "SubText"
+            subPlace.Size = UDim2.new(1, 0, 0, 14)
+            subPlace.BackgroundTransparency = 1
+            Theme.ApplyTypography(subPlace, "Body", "Small")
+            subPlace.Text = "Supported Game"
+            subPlace.TextColor3 = Color3.fromRGB(130, 130, 145)
+            subPlace.TextXAlignment = Enum.TextXAlignment.Left
+            subPlace.TextTruncate = Enum.TextTruncate.AtEnd
+            subPlace.LayoutOrder = 2
+            subPlace.Parent = nameCol
+
+            -- 2. Place ID Column - 24% width (Position: 0.40, ends at 0.64 - Ample room, Zero Overlap!)
+            local placeIdLabel = Instance.new("TextLabel")
+            placeIdLabel.Name = "PlaceID"
+            placeIdLabel.Size = UDim2.new(0.24, 0, 1, 0)
+            placeIdLabel.Position = UDim2.new(0.40, 0, 0, 0)
+            placeIdLabel.BackgroundTransparency = 1
+            Theme.ApplyTypography(placeIdLabel, "Code", "Small")
+            placeIdLabel.Text = tostring(placeIdNum > 0 and placeIdNum or "0")
+            placeIdLabel.TextColor3 = Color3.fromRGB(209, 213, 219)
+            placeIdLabel.TextXAlignment = Enum.TextXAlignment.Left
+            placeIdLabel.TextTruncate = Enum.TextTruncate.None
+            placeIdLabel.Parent = row
+
+            -- 3. Update Date Column - 16% width (Position: 0.66, ends at 0.82 - 20px gap after Place ID!)
+            local updateLabel = Instance.new("TextLabel")
+            updateLabel.Name = "UpdateDate"
+            updateLabel.Size = UDim2.new(0.16, 0, 1, 0)
+            updateLabel.Position = UDim2.new(0.66, 0, 0, 0)
+            updateLabel.BackgroundTransparency = 1
+            Theme.ApplyTypography(updateLabel, "Body", "Sub")
+            updateLabel.Text = os.date("%d/%m/%Y")
+            updateLabel.TextColor3 = Color3.fromRGB(209, 213, 219)
+            updateLabel.TextXAlignment = Enum.TextXAlignment.Left
+            updateLabel.Parent = row
+
+            -- Asynchronously fetch real update date and high-res official IconImageAssetId
+            if placeIdNum > 0 then
+                task.spawn(function()
+                    pcall(function()
+                        local MarketplaceService = game:GetService("MarketplaceService")
+                        local info = MarketplaceService:GetProductInfo(placeIdNum)
+                        if info then
+                            if info.Updated and updateLabel and updateLabel.Parent then
+                                updateLabel.Text = formatUpdateDate(info.Updated)
+                            end
+                            if info.Name and (not mData.Name or mData.Name == "" or mData.Name == "Unknown Map") and mapTitle and mapTitle.Parent then
+                                mapTitle.Text = info.Name
+                            end
+                            if info.IconImageAssetId and info.IconImageAssetId > 0 and mapArtwork and mapArtwork.Parent then
+                                mapArtwork.Image = string.format("rbxassetid://%d", info.IconImageAssetId)
+                            end
+                        end
+                    end)
+                end)
+            end
+
+            -- 4. Status Column - 15% width (Position: 0.84, ends at 0.99 - Green/Online, Orange/Update, Red/Risk)
+            local statusContainer = Instance.new("Frame")
+            statusContainer.Name = "StatusContainer"
+            statusContainer.Size = UDim2.new(0.15, 0, 1, 0)
+            statusContainer.Position = UDim2.new(0.84, 0, 0, 0)
+            statusContainer.BackgroundTransparency = 1
+            statusContainer.Parent = row
+
+            local scLayout = Instance.new("UIListLayout")
+            scLayout.FillDirection = Enum.FillDirection.Horizontal
+            scLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+            scLayout.Padding = UDim.new(0, 6)
+            scLayout.Parent = statusContainer
+
+            local statusDot = Instance.new("Frame")
+            statusDot.Name = "StatusCircle"
+            statusDot.Size = UDim2.fromOffset(10, 10)
+            statusDot.BorderSizePixel = 0
+            local sdCorner = Instance.new("UICorner")
+            sdCorner.CornerRadius = UDim.new(1, 0)
+            sdCorner.Parent = statusDot
+
+            local sTextStr, sColor = resolveStatus(mData.Status)
+            statusDot.BackgroundColor3 = sColor
+            statusDot.Parent = statusContainer
+
+            local statusText = Instance.new("TextLabel")
+            statusText.Name = "StatusText"
+            statusText.AutomaticSize = Enum.AutomaticSize.X
+            statusText.Size = UDim2.new(0, 0, 1, 0)
+            statusText.BackgroundTransparency = 1
+            Theme.ApplyTypography(statusText, "Header", "Small")
+            statusText.Text = sTextStr
+            statusText.TextColor3 = sColor
+            statusText.TextXAlignment = Enum.TextXAlignment.Left
+            statusText.Parent = statusContainer
+
+            row.Parent = rowsHolder
+            table.insert(createdRowFrames, { Frame = row, Data = mData })
+        end
+    end
+
+    -- Pagination slide button handlers
+    prevSlideBtn.MouseButton1Click:Connect(function()
+        if currentSlide > 1 then
+            currentSlide = currentSlide - 1
+            rebuildMapTable()
+        end
+    end)
+
+    nextSlideBtn.MouseButton1Click:Connect(function()
+        local totalSlides = math.max(1, math.ceil(lastFilteredCount / MAPS_PER_SLIDE))
+        if currentSlide < totalSlides then
+            currentSlide = currentSlide + 1
+            rebuildMapTable()
+        end
+    end)
+
+    -- Filter Logic: Search + Status Dropdown
+    local function applyMapFilter()
+        currentSlide = 1
+        rebuildMapTable()
+    end
+
+    sInput:GetPropertyChangedSignal("Text"):Connect(applyMapFilter)
+
+    -- Status Dropdown Popover Options: All Status, Online, Update, Risk
+    local statusOptions = {
+        { Id = "All", Label = "All Status", Color = Color3.fromRGB(220, 220, 230), DotColor = Color3.fromRGB(156, 163, 175) },
+        { Id = "Online", Label = "Online", Color = Color3.fromRGB(34, 197, 94), DotColor = Color3.fromRGB(34, 197, 94) },
+        { Id = "Update", Label = "Update", Color = Color3.fromRGB(249, 115, 22), DotColor = Color3.fromRGB(249, 115, 22) },
+        { Id = "Risk", Label = "Risk", Color = Color3.fromRGB(239, 68, 68), DotColor = Color3.fromRGB(239, 68, 68) },
+    }
+
+    local win = self.Window
+    local mainWindow = (win and win.MainFrame) or root
+    statusPopover.Parent = mainWindow
+    statusPopover.ZIndex = 4500
+
+    local POPOVER_TARGET_H = 142
+    local isDropdownOpen = false
+    local lastToggleClock = 0
+
+    local function updateStatusDropdownPos()
+        local win = self.Window
+        local mainWindow = (win and win.MainFrame) or root
+        if not mainWindow or not statusDropdownBtn then return end
+
+        local scale = 1
+        if win and win.ContainerManager and win.ContainerManager.UIScale then
+            scale = math.max(0.001, win.ContainerManager.UIScale.Scale)
+        end
+        local winScaleObj = mainWindow:FindFirstChild("WindowScale")
+        local winScale = (winScaleObj and winScaleObj:IsA("UIScale") and winScaleObj.Scale) or 1
+        local totalScale = scale * winScale
+        if totalScale <= 0 then totalScale = 1 end
+
+        local btnAbsPos = statusDropdownBtn.AbsolutePosition
+        local btnAbsSize = statusDropdownBtn.AbsoluteSize
+        local winAbsPos = mainWindow.AbsolutePosition
+
+        local relX = (btnAbsPos.X - winAbsPos.X) / totalScale
+        local relY = (btnAbsPos.Y - winAbsPos.Y) / totalScale
+        local btnH = btnAbsSize.Y / totalScale
+
+        statusPopover.Position = UDim2.fromOffset(relX, relY + btnH + 4)
+    end
+
+    local optionWidgets = {}
+
+    local function closeStatusDropdown()
+        if not isDropdownOpen then return end
+        isDropdownOpen = false
+        lastToggleClock = os.clock()
+        Tweener.Tween(statusPopover, Tweener.Info.Fluid, {
+            Size = UDim2.fromOffset(150, 0),
+        })
+        Tweener.Tween(sdbArrow, Tweener.Info.Fast, {
+            Rotation = 0,
+        })
+        task.delay(0.20, function()
+            if not isDropdownOpen then
+                statusPopover.Visible = false
+            end
+        end)
+    end
+
+    local function openStatusDropdown()
+        if isDropdownOpen then return end
+        isDropdownOpen = true
+        lastToggleClock = os.clock()
+        updateStatusDropdownPos()
+        statusPopover.Size = UDim2.fromOffset(150, 0)
+        statusPopover.Visible = true
+        Tweener.Tween(statusPopover, Tweener.Info.Fluid, {
+            Size = UDim2.fromOffset(150, POPOVER_TARGET_H),
+        })
+        Tweener.Tween(sdbArrow, Tweener.Info.Fast, {
+            Rotation = 180,
+        })
+    end
+
+    local function selectStatusOption(opt: any)
+        currentStatusFilter = opt.Id
+        sdbText.Text = opt.Id == "All" and "All Status" or opt.Id
+        sdbText.TextColor3 = opt.Color
+        sdbDot.BackgroundColor3 = opt.DotColor
+
+        for _, w in ipairs(optionWidgets) do
+            local isSel = (w.Opt.Id == opt.Id)
+            w.Check.Visible = isSel
+            w.Btn.BackgroundColor3 = if isSel then Theme.GetToken("SurfaceHover") else Color3.fromRGB(18, 15, 24)
+        end
+
+        closeStatusDropdown()
+        applyMapFilter()
+    end
+
+    for _, opt in ipairs(statusOptions) do
+        local isSel = (opt.Id == currentStatusFilter)
+        local oBtn = Instance.new("TextButton")
+        oBtn.Name = "Option_" .. opt.Id
+        oBtn.Size = UDim2.new(1, 0, 0, 30)
+        oBtn.BackgroundColor3 = if isSel then Theme.GetToken("SurfaceHover") else Color3.fromRGB(18, 15, 24)
+        oBtn.AutoButtonColor = false
+        oBtn.BorderSizePixel = 0
+        oBtn.Text = ""
+
+        local obc = Instance.new("UICorner")
+        obc.CornerRadius = Theme.Radii.Control
+        obc.Parent = oBtn
+
+        local oPad = Instance.new("UIPadding")
+        oPad.PaddingLeft = UDim.new(0, 8)
+        oPad.PaddingRight = UDim.new(0, 8)
+        oPad.Parent = oBtn
+
+        local optDot = Instance.new("Frame")
+        optDot.Name = "Dot"
+        optDot.Size = UDim2.fromOffset(8, 8)
+        optDot.Position = UDim2.new(0, 0, 0.5, 0)
+        optDot.AnchorPoint = Vector2.new(0, 0.5)
+        optDot.BackgroundColor3 = opt.DotColor
+        optDot.BorderSizePixel = 0
+        local odCorner = Instance.new("UICorner")
+        odCorner.CornerRadius = UDim.new(1, 0)
+        odCorner.Parent = optDot
+        optDot.Parent = oBtn
+
+        local oText = Instance.new("TextLabel")
+        oText.Size = UDim2.new(1, -34, 1, 0)
+        oText.Position = UDim2.new(0, 14, 0, 0)
+        oText.BackgroundTransparency = 1
+        Theme.ApplyTypography(oText, "Body", "Small")
+        oText.Text = opt.Label
+        oText.TextColor3 = opt.Color
+        oText.TextXAlignment = Enum.TextXAlignment.Left
+        oText.Parent = oBtn
+
+        local oCheck = Instance.new("ImageLabel")
+        oCheck.Name = "Checkmark"
+        oCheck.Size = UDim2.fromOffset(13, 13)
+        oCheck.Position = UDim2.new(1, 0, 0.5, 0)
+        oCheck.AnchorPoint = Vector2.new(1, 0.5)
+        oCheck.BackgroundTransparency = 1
+        oCheck.ImageColor3 = Theme.GetToken("Accent")
+        Icons.Apply(oCheck, "check")
+        oCheck.Visible = isSel
+        oCheck.Parent = oBtn
+        Theme.Bind(oCheck, "ImageColor3", "Accent")
+
+        oBtn.MouseEnter:Connect(function()
+            if currentStatusFilter ~= opt.Id then
+                Tweener.Tween(oBtn, Tweener.Info.Fast, { BackgroundColor3 = Theme.GetToken("SurfaceHover") })
+            end
+        end)
+        oBtn.MouseLeave:Connect(function()
+            if currentStatusFilter ~= opt.Id then
+                Tweener.Tween(oBtn, Tweener.Info.Fast, { BackgroundColor3 = Color3.fromRGB(18, 15, 24) })
+            end
+        end)
+
+        oBtn.MouseButton1Click:Connect(function()
+            selectStatusOption(opt)
+        end)
+
+        oBtn.Parent = statusPopover
+        table.insert(optionWidgets, { Btn = oBtn, Check = oCheck, Opt = opt })
+    end
+
+    statusDropdownBtn.MouseButton1Click:Connect(function()
+        if (os.clock() - lastToggleClock) < 0.20 then return end
+        if isDropdownOpen then
+            closeStatusDropdown()
+        else
+            openStatusDropdown()
+        end
+    end)
+
+    -- Close popover when clicking anywhere outside
+    UserInputService.InputBegan:Connect(function(input)
+        if not isDropdownOpen then return end
+        if (os.clock() - lastToggleClock) < 0.25 then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            local pos = Vector2.new(input.Position.X, input.Position.Y)
+            local bPos = statusDropdownBtn.AbsolutePosition
+            local bSize = statusDropdownBtn.AbsoluteSize
+            local inBtn = pos.X >= bPos.X and pos.X <= (bPos.X + bSize.X) and pos.Y >= bPos.Y and pos.Y <= (bPos.Y + bSize.Y)
+            local pPos = statusPopover.AbsolutePosition
+            local pSize = statusPopover.AbsoluteSize
+            local inPop = pos.X >= pPos.X and pos.X <= (pPos.X + pSize.X) and pos.Y >= pPos.Y and pos.Y <= (pPos.Y + pSize.Y)
+            if not inBtn and not inPop then
+                closeStatusDropdown()
+            end
+        end
+    end)
+
+    -- Initial Table Render
+    rebuildMapTable()
+
+    -- Asynchronous Remote Fetch from GitHub URL:
+    -- https://raw.githubusercontent.com/sodium-hub/ui/refs/heads/main/status.luau
+    task.spawn(function()
+        pcall(function()
+            local statusUrl = "https://raw.githubusercontent.com/sodium-hub/ui/refs/heads/main/status.luau"
+            local rawContent = Compat.HttpGet(statusUrl)
+            if rawContent and type(rawContent) == "string" and #rawContent > 10 then
+                local loadFn, loadErr = loadstring(rawContent)
+                if loadFn and not loadErr then
+                    local okExec, remoteMaps = pcall(loadFn)
+                    if okExec and type(remoteMaps) == "table" and #remoteMaps > 0 then
+                        activeMapList = remoteMaps
+                        rebuildMapTable()
+                        applyMapFilter()
+                    end
+                end
+            end
+        end)
+    end)
+
+    -- Helpers to compute Whitelist & Execute times
+    local function getWhitelistRemaining(): string
+        local exp = props.KeyExpires
+        local win = self.Window
+        if not exp and win and win.Props and win.Props.User then
+            exp = win.Props.User.KeyExpires
+        end
+        local genv = (type(getgenv) == "function" and getgenv()) or nil
+        if not exp and genv then
+            exp = genv.JD_EXPIRES_AT or genv.KEY_EXPIRES or genv.SCRIPT_KEY_EXPIRES
+        end
+        if not exp then
+            pcall(function()
+                local folder = (win and win.Folder) or "SodiumHub"
+                local path = folder .. "/key.json"
+                if Compat.HasFS() and Compat.IsFile(path) then
+                    local content = Compat.ReadFile(path)
+                    local ok, data = pcall(game:GetService("HttpService").JSONDecode, game:GetService("HttpService"), content)
+                    if ok and type(data) == "table" and data.expires_at then
+                        exp = data.expires_at
+                    end
+                end
+            end)
+        end
+
+        if exp == "Lifetime" or exp == "lifetime" or exp == "Permanent" then
+            return "Lifetime"
+        end
+
+        local targetTimestamp = tonumber(exp)
+        if not targetTimestamp then
+            local cachedStart = genv and genv._SODIUM_WL_EXPIRY
+            if not cachedStart then
+                cachedStart = os.time() + (29 * 86400) + (12 * 3600) + (39 * 60) + 20
+                if genv then genv._SODIUM_WL_EXPIRY = cachedStart end
+            end
+            targetTimestamp = cachedStart
+        end
+
+        local diff = math.max(0, targetTimestamp - os.time())
+        if diff <= 0 then
+            return "Expired"
+        end
+
+        local days = math.floor(diff / 86400)
+        local hours = math.floor((diff % 86400) / 3600)
+        local mins = math.floor((diff % 3600) / 60)
+        local secs = diff % 60
+        return string.format("%ddays %dhr %dmin %dsec", days, hours, mins, secs)
+    end
+
+    local function getExecuteElapsed(): string
+        local elapsed = math.floor(tick() - _scriptStartTime)
+        local days = math.floor(elapsed / 86400)
+        local hours = math.floor((elapsed % 86400) / 3600)
+        local mins = math.floor((elapsed % 3600) / 60)
+        local secs = elapsed % 60
+        if days > 0 then
+            return string.format("%ddays %dhr %dmin %dsec", days, hours, mins, secs)
+        else
+            return string.format("%dhr %dmin %dsec", hours, mins, secs)
+        end
+    end
+
+    root.Parent = self.Container
+
+    -- Dynamic Live Telemetry Loop (Players 22/50, Whitelist Remaining, Execute Time)
+    task.spawn(function()
+        while root and root.Parent do
+            pcall(function()
+                local curP = math.max(22, #Players:GetPlayers())
+                local maxP = math.max(50, Players.MaxPlayers)
+                valPlayers.Text = string.format("%d/%d", curP, maxP)
+                valWhitelist.Text = getWhitelistRemaining()
+                valExecuteTime.Text = getExecuteElapsed()
+            end)
+            task.wait(1.0)
+        end
+    end)
+
+    return root
 end
 
 function Tab:DiscordCard(rawProps: any?)
@@ -13495,9 +15300,9 @@ function Window.new(containerManager: any, props: WindowProps)
         g._SODIUM_ACTIVE_WINDOW = self
     end
     
-    -- Built-in Persistent "Overview" TabSection with default "Dashboard" Tab
+    -- Built-in Persistent "General" TabSection with default "Dashboard" Tab (matching screenshot)
     local overviewSection = self:Section({
-        Title = { EN = "Overview", TH = "ภาพรวม" },
+        Title = { EN = "General", TH = "ทั่วไป" },
         Collapsible = false,
     })
     local dashboardTab = overviewSection:Tab({
@@ -13505,11 +15310,14 @@ function Window.new(containerManager: any, props: WindowProps)
         Icon = "layout-dashboard",
     })
 
-    -- Add default BoxProfile Card & ServerCard to Dashboard
-    local profileCard = dashboardTab:ProfileCard()
-    local serverCard = dashboardTab:ServerCard()
-    dashboardTab.ProfileCardInstance = profileCard
-    dashboardTab.ServerCardInstance = serverCard
+    -- Add exact image-matched DashboardView
+    local dashboardView = dashboardTab:DashboardView({
+        Category = "General",
+        CurrentPage = "Dashboard",
+        Version = "1.0.0",
+        Role = "Administrator",
+    })
+    dashboardTab.DashboardViewInstance = dashboardView
 
     self.OverviewSection = overviewSection
     self.DashboardTab = dashboardTab
