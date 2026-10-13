@@ -14237,6 +14237,7 @@ function Window.new(containerManager: any, props: WindowProps)
     self._configNameMap = {}
     self._selectedConfigName = "Main"
     self._isLoadingConfig = false
+    self._pendingConfigData = nil
     self._virtualConfigs = {}
     self._currentSection = nil
     self.CurrentTab = nil
@@ -16015,6 +16016,22 @@ function Window:RegisterFlag(flag: string, elem: any)
     if not flag or flag == "" then return end
     self.Flags[flag] = elem
     
+    -- Deferred config restoration: applies pending saved value when element mounts after LoadConfig.
+    if self._pendingConfigData then
+        local pendingVal = self._pendingConfigData[flag]
+        if pendingVal ~= nil then
+            self._pendingConfigData[flag] = nil
+            task.defer(function()
+                local wasLoading = self._isLoadingConfig
+                self._isLoadingConfig = true
+                pcall(function()
+                    elem:Set(pendingVal, false, false)
+                end)
+                self._isLoadingConfig = wasLoading
+            end)
+        end
+    end
+    
     local origCallback = elem.Callback
     elem.Callback = function(...)
         if origCallback then
@@ -16135,6 +16152,7 @@ function Window:SaveConfig(name: string, silent: boolean?): boolean
         SavedAt = os.time(),
         PlaceId = game.PlaceId,
         AutoSave = self._autoSaveEnabled,
+        AutoLoad = (self:GetAutoLoadConfig() ~= nil),
     }
     for flag, elem in pairs(self.Flags) do
         if elem and type(elem.Get) == "function" then
@@ -16231,15 +16249,39 @@ function Window:LoadConfig(name: string, silent: boolean?): boolean
 
     -- Batched state application: updates element flags without triggering redundant saves or animations.
     self._isLoadingConfig = true
-    task.spawn(function()
-        for flag, val in pairs(data.Flags) do
-            local elem = self.Flags[flag]
-            if elem and type(elem.Set) == "function" then
+    self._pendingConfigData = nil
+
+    local pendingData = {}
+    local appliedCount = 0
+
+    for flag, val in pairs(data.Flags) do
+        local elem = self.Flags[flag]
+        if elem and type(elem.Set) == "function" then
+            appliedCount += 1
+            task.defer(function()
                 pcall(function()
-                    elem:Set(val, false, false) -- (value, skipCallback, animate=false for instantaneous batching)
+                    elem:Set(val, false, false)
                 end)
-            end
+            end)
+        else
+            -- Element not registered yet; stash for deferred per-flag application in RegisterFlag.
+            pendingData[flag] = val
         end
+    end
+
+    -- Stash unresolved flags for late-mounting elements to pick up via RegisterFlag.
+    if next(pendingData) then
+        self._pendingConfigData = pendingData
+        -- Expire pending data after 10s to prevent memory leak from orphaned flags.
+        task.delay(10, function()
+            if self._pendingConfigData == pendingData then
+                self._pendingConfigData = nil
+            end
+        end)
+    end
+
+    -- Release loading lock after all deferred sets have been scheduled.
+    task.defer(function()
         self._isLoadingConfig = false
 
         if self._dirtyFlags then
@@ -16248,6 +16290,10 @@ function Window:LoadConfig(name: string, silent: boolean?): boolean
 
         if data.AutoSave ~= nil then
             self:SetAutoSave(data.AutoSave, cfgName, true)
+        end
+
+        if data.AutoLoad ~= nil and data.AutoLoad then
+            self:SetAutoLoad(true, cfgName)
         end
 
         if not silent and self.Notify then
