@@ -14408,6 +14408,10 @@ function Window.new(containerManager: any, props: WindowProps)
     self._autoSaveEnabled = false
     self._autoSaveTarget = "Main"
     self._autoSaveGen = 0
+    self._autoSaveThread = nil
+    self._dirtyFlags = {}
+    self._cachedConfigs = nil
+    self._configNameMap = {}
     self._selectedConfigName = "Main"
     self._isLoadingConfig = false
     self._virtualConfigs = {}
@@ -16252,9 +16256,21 @@ function Window:NotifyFlagChange(flag: string)
     if self._isLoadingConfig or not self._autoSaveEnabled then
         return
     end
+
+    if not self._dirtyFlags then
+        self._dirtyFlags = {}
+    end
+    self._dirtyFlags[flag] = true
+
+    if self._autoSaveThread then
+        pcall(task.cancel, self._autoSaveThread)
+        self._autoSaveThread = nil
+    end
+
     self._autoSaveGen = (self._autoSaveGen or 0) + 1
     local currentGen = self._autoSaveGen
-    task.delay(0.7, function()
+    self._autoSaveThread = task.delay(0.7, function()
+        self._autoSaveThread = nil
         if self._autoSaveGen == currentGen and self._autoSaveEnabled and not self._isLoadingConfig then
             local targetName = self._autoSaveTarget or self._selectedConfigName or "Main"
             self:SaveConfig(targetName, true)
@@ -16262,17 +16278,31 @@ function Window:NotifyFlagChange(flag: string)
     end)
 end
 
+function Window:_invalidateConfigCache()
+    self._cachedConfigs = nil
+    table.clear(self._configNameMap)
+end
+
 function Window:GetConfigs(): { string }
+    if self._cachedConfigs then
+        return self._cachedConfigs
+    end
+
+    table.clear(self._configNameMap)
+
     if not Compat.HasFS() then
         local names = {}
         for name in pairs(self._virtualConfigs) do
             table.insert(names, name)
+            self._configNameMap[string.lower(name)] = name
         end
         table.sort(names)
         if #names == 0 then
             self:SaveConfig("Main", true)
             table.insert(names, "Main")
+            self._configNameMap["main"] = "Main"
         end
+        self._cachedConfigs = names
         return names
     end
 
@@ -16289,6 +16319,7 @@ function Window:GetConfigs(): { string }
             local lower = string.lower(name)
             if not seen[lower] then
                 seen[lower] = true
+                self._configNameMap[lower] = name
                 table.insert(results, name)
             end
         end
@@ -16298,40 +16329,29 @@ function Window:GetConfigs(): { string }
     if #results == 0 then
         self:SaveConfig("Main", true)
         table.insert(results, "Main")
+        self._configNameMap["main"] = "Main"
     end
 
     table.sort(results)
+    self._cachedConfigs = results
     return results
 end
 
 function Window:SaveConfig(name: string, silent: boolean?): boolean
     local rawName = (name and name ~= "") and name or "Main"
-    local cfgName = rawName
+    local lower = string.lower(rawName)
 
-    -- Deduplicate case-insensitively with existing configs on disk/virtual storage
-    if Compat.HasFS() then
-        Compat.MakeFolder(self.ConfigFolder)
-        local list = Compat.ListFiles(self.ConfigFolder)
-        for _, path in ipairs(list) do
-            local clean = string.gsub(path, "\\", "/")
-            local ex = string.match(clean, "([^/]+)%.json$")
-            if ex and string.lower(ex) == string.lower(rawName) then
-                cfgName = ex -- Retain existing filename
-                break
-            end
-        end
-    else
-        for ex in pairs(self._virtualConfigs) do
-            if string.lower(ex) == string.lower(rawName) then
-                cfgName = ex
-                break
-            end
-        end
+    -- Ensure cache & name map are populated
+    if not self._cachedConfigs then
+        self:GetConfigs()
     end
 
+    -- Case-insensitive deduplication using O(1) hash map
+    local cfgName = self._configNameMap[lower] or rawName
     self._selectedConfigName = cfgName
-    
+
     local data = {
+        Version = 2,
         Flags = {},
         SavedAt = os.time(),
         PlaceId = game.PlaceId,
@@ -16345,7 +16365,7 @@ function Window:SaveConfig(name: string, silent: boolean?): boolean
             end
         end
     end
-    
+
     local okEncode, json = pcall(HttpService.JSONEncode, HttpService, data)
     if not okEncode or not json then
         if not silent and self.Notify then
@@ -16353,7 +16373,7 @@ function Window:SaveConfig(name: string, silent: boolean?): boolean
         end
         return false
     end
-    
+
     if Compat.HasFS() then
         Compat.MakeFolder(self.ConfigFolder)
         local filePath = self.ConfigFolder .. "/" .. cfgName .. ".json"
@@ -16367,7 +16387,15 @@ function Window:SaveConfig(name: string, silent: boolean?): boolean
     else
         self._virtualConfigs[cfgName] = json
     end
-    
+
+    -- Clear dirty flags after successful save
+    if self._dirtyFlags then
+        table.clear(self._dirtyFlags)
+    end
+
+    -- Invalidate file list cache
+    self:_invalidateConfigCache()
+
     if not silent and self.Notify then
         self:Notify({
             Title = "Config Saved",
@@ -16376,7 +16404,7 @@ function Window:SaveConfig(name: string, silent: boolean?): boolean
             Icon = "check",
         })
     end
-    
+
     if self._onConfigListChanged then
         pcall(self._onConfigListChanged)
     end
@@ -16384,9 +16412,15 @@ function Window:SaveConfig(name: string, silent: boolean?): boolean
 end
 
 function Window:LoadConfig(name: string, silent: boolean?): boolean
-    local cfgName = (name and name ~= "") and name or "Main"
+    local rawName = (name and name ~= "") and name or "Main"
+    local lower = string.lower(rawName)
+
+    if not self._cachedConfigs then
+        self:GetConfigs()
+    end
+    local cfgName = self._configNameMap[lower] or rawName
     self._selectedConfigName = cfgName
-    
+
     local json = nil
     if Compat.HasFS() then
         local filePath = self.ConfigFolder .. "/" .. cfgName .. ".json"
@@ -16400,14 +16434,14 @@ function Window:LoadConfig(name: string, silent: boolean?): boolean
     else
         json = self._virtualConfigs[cfgName]
     end
-    
+
     if not json or json == "" then
         if not silent and self.Notify then
             self:Notify({ Title = "Load Failed", Content = "Config file is empty", Duration = 2.5, Icon = "alert-circle" })
         end
         return false
     end
-    
+
     local okDecode, data = pcall(HttpService.JSONDecode, HttpService, json)
     if not okDecode or type(data) ~= "table" or type(data.Flags) ~= "table" then
         if not silent and self.Notify then
@@ -16415,22 +16449,27 @@ function Window:LoadConfig(name: string, silent: boolean?): boolean
         end
         return false
     end
-    
+
+    -- Batch apply flag values without firing redundant save cycles or animations
     self._isLoadingConfig = true
     for flag, val in pairs(data.Flags) do
         local elem = self.Flags[flag]
         if elem and type(elem.Set) == "function" then
             pcall(function()
-                elem:Set(val, false)
+                elem:Set(val, false, false) -- (value, skipCallback, animate=false for instantaneous batching)
             end)
         end
     end
     self._isLoadingConfig = false
 
+    if self._dirtyFlags then
+        table.clear(self._dirtyFlags)
+    end
+
     if data.AutoSave ~= nil then
         self:SetAutoSave(data.AutoSave, cfgName, true)
     end
-    
+
     if not silent and self.Notify then
         self:Notify({
             Title = "Config Loaded",
@@ -16443,8 +16482,15 @@ function Window:LoadConfig(name: string, silent: boolean?): boolean
 end
 
 function Window:DeleteConfig(name: string, silent: boolean?): boolean
-    local cfgName = (name and name ~= "") and name or "Main"
+    local rawName = (name and name ~= "") and name or "Main"
+    local lower = string.lower(rawName)
+
+    if not self._cachedConfigs then
+        self:GetConfigs()
+    end
+    local cfgName = self._configNameMap[lower] or rawName
     local deleted = false
+
     if Compat.HasFS() then
         local filePath = self.ConfigFolder .. "/" .. cfgName .. ".json"
         if Compat.IsFile(filePath) then
@@ -16462,6 +16508,8 @@ function Window:DeleteConfig(name: string, silent: boolean?): boolean
         deleted = true
     end
 
+    self:_invalidateConfigCache()
+
     if not silent and self.Notify then
         self:Notify({
             Title = if deleted then "Config Deleted" else "Delete Failed",
@@ -16470,6 +16518,12 @@ function Window:DeleteConfig(name: string, silent: boolean?): boolean
             Icon = if deleted then "trash-2" else "alert-circle",
         })
     end
+
+    if self._onConfigListChanged then
+        pcall(self._onConfigListChanged)
+    end
+    return deleted
+end
 
     if self._onConfigListChanged then
         pcall(self._onConfigListChanged)
