@@ -24,7 +24,7 @@ end
 _MODULES['Core/Signals'] = function()
 --!strict
 --[=[
-	Sodium UI v2 - Core/Signals.luau
+	Pumpkin UI - Core/Signals.luau
 	Zero-dependency pub/sub. pcall-isolated callbacks, snapshot fire,
 	idempotent connections, full unload hygiene.
 ]=]
@@ -170,7 +170,7 @@ end
 _MODULES['Core/Locale'] = function()
 --!strict
 --[=[
-	Sodium UI v2 - Core/Locale.luau
+	Pumpkin UI - Core/Locale.luau
 	Reactive I18n. Zero overhead for static strings,
 	dedupe bind, weak-key GC + Destroying cleanup.
 ]=]
@@ -303,7 +303,7 @@ end
 _MODULES['Core/Theme'] = function()
 --!strict
 --[=[
-	Sodium UI v2 - Core/Theme.luau
+	Pumpkin UI - Core/Theme.luau
 	Single token table, weak-key bind registry with dedupe,
 	batched SetTheme (tween <=200 else instant), cached mobile flag.
 ]=]
@@ -606,7 +606,7 @@ end
 _MODULES['Core/Tweener'] = function()
 --!strict
 --[=[
-	Sodium UI v2 - Core/Tweener.luau
+	Pumpkin UI - Core/Tweener.luau
 	Tween manager: cancel-before-start, pcall-safe, connection-tracked
 	feedback helpers. No Theme require (injected colors, no cycles).
 ]=]
@@ -724,10 +724,12 @@ function Tweener.Tween(instance: Instance, info: TweenInfo, goals: { [string]: a
 			activeTweens[instance] = nil
 		end
 		if onComplete then
-			local ok2, err = pcall(onComplete)
-			if not ok2 then
-				warn("[SodiumUI.Tweener] " .. tostring(err))
-			end
+			task.spawn(function()
+				local ok2, err = pcall(onComplete)
+				if not ok2 then
+					warn("[PumpkinUI.Tweener] " .. tostring(err))
+				end
+			end)
 		end
 	end)
 	local okPlay = pcall((tween :: Tween).Play, tween)
@@ -963,11 +965,6 @@ return Tweener
 end
 
 _MODULES['Core/Icons'] = function()
--- Sodium UI - Core/Icons.luau
--- High-Performance Multi-Pack Icon Engine for Sodium UI
--- Default Icon Pack: Lucide (1,700+ Icons Embedded Offline)
--- Supported External Packs: Solar, Craft, Geist, SFSymbols, Gravity UI
--- Powered by Sodium UI Architecture
 
 local ContentProvider = game:GetService("ContentProvider")
 
@@ -2713,7 +2710,7 @@ Icons.Packs["lucide"] = {
 }
 
 local IconAliases = {
-    -- Home & Navigation
+    
     ["house"] = "house",
     ["houses"] = "house",
     ["home"] = "house",
@@ -2721,7 +2718,7 @@ local IconAliases = {
     ["main"] = "house",
     ["dashboard"] = "house",
     
-    -- Settings & Config
+    
     ["gear"] = "settings",
     ["gears"] = "settings",
     ["cog"] = "settings",
@@ -2736,7 +2733,7 @@ local IconAliases = {
     ["config"] = "settings",
     ["configuration"] = "settings",
     
-    -- Combat & Aim
+    
     ["aim"] = "crosshair",
     ["aimbot"] = "crosshair",
     ["scope"] = "crosshair",
@@ -2755,7 +2752,7 @@ local IconAliases = {
     ["protect"] = "shield",
     ["guard"] = "shield",
     
-    -- Users & Identity
+    
     ["player"] = "user",
     ["players"] = "users",
     ["profile"] = "user",
@@ -2770,7 +2767,7 @@ local IconAliases = {
     ["ghosts"] = "ghost",
     ["stealth"] = "ghost",
     
-    -- Notifications & Alerts
+    
     ["notification"] = "bell",
     ["notifications"] = "bell",
     ["notify"] = "bell",
@@ -2798,7 +2795,7 @@ local IconAliases = {
     ["x-circle"] = "circle-x",
     ["circle-x"] = "circle-x",
     
-    -- Files, Storage & Actions
+    
     ["bin"] = "trash",
     ["trashcan"] = "trash",
     ["garbage"] = "trash",
@@ -2827,7 +2824,7 @@ local IconAliases = {
     ["cmd"] = "terminal",
     ["console"] = "terminal",
     
-    -- Telemetry & Senses
+    
     ["speed"] = "gauge",
     ["speedometer"] = "gauge",
     ["velocity"] = "gauge",
@@ -2863,7 +2860,7 @@ local IconAliases = {
     ["kill"] = "skull",
     ["dead"] = "skull",
     
-    -- Audio & Media
+    
     ["sound"] = "volume-2",
     ["sounds"] = "volume-2",
     ["audio"] = "volume-2",
@@ -2881,7 +2878,7 @@ local IconAliases = {
     ["email"] = "mail",
     ["inbox"] = "mail",
     
-    -- Keys & Locks
+    
     ["keys"] = "key",
     ["passcode"] = "key",
     ["pass"] = "key",
@@ -2890,7 +2887,7 @@ local IconAliases = {
     ["unlocks"] = "unlock",
     ["unlocked"] = "unlock",
     
-    -- System, Network & Flow
+    
     ["reload"] = "rotate-cw",
     ["sync"] = "rotate-cw",
     ["reset"] = "rotate-ccw",
@@ -3339,7 +3336,7 @@ end
 _MODULES['Core/Compat'] = function()
 --!strict
 --[=[
-	Sodium UI v2 - Core/Compat.luau
+	Pumpkin UI - Core/Compat.luau
 	Feature-detection compat layer. Loaded first, zero dependencies.
 	No identity detection (identifyexecutor). All executor calls pcall-wrapped.
 ]=]
@@ -3760,7 +3757,7 @@ end
 _MODULES['Core/Container'] = function()
 --!strict
 --[=[
-	Sodium UI v2 - Core/Container.luau
+	Pumpkin UI - Core/Container.luau
 	Root ScreenGui + viewport UIScale engine.
 	Keeps v1 scale math (margin/inset/dpiMax) + leak-free debounce.
 	Uses Compat for mount/cleanup (feature-detect, no identity check).
@@ -3971,7 +3968,7 @@ end
 _MODULES['Elements/Button'] = function()
 --!strict
 --[=[
-    Sodium UI - Elements/Button.luau
+    Pumpkin UI - Elements/Button.luau
     Action trigger with physical micro-press feedback (scale: 0.97) and hover lift.
 ]=]
 
@@ -4006,14 +4003,13 @@ function Button.new(parent: Instance, props: any)
     local isDesc = descProp and (if type(descProp) == "table" then true else descProp ~= "")
     local containerHeight = if isDesc then 54 else 38
     
-    -- Slot wrapper (for UIListLayout stability, stays in place while button scales into center)
+    -- Layout slot wrapper: stabilizes UIListLayout while button applies micro-press center scaling.
     local slot = Instance.new("Frame")
     slot.Name = "Button_" .. tostring(titleText)
     slot.Size = UDim2.new(1, 0, 0, containerHeight)
     slot.BackgroundTransparency = 1
     slot.BorderSizePixel = 0
     
-    -- Card container (Positioned at center 0.5, 0.5 with AnchorPoint 0.5, 0.5 for true center micro-press scaling)
     local container = Instance.new("Frame")
     container.Name = "Card"
     container.Size = UDim2.fromScale(1, 1)
@@ -4050,7 +4046,6 @@ function Button.new(parent: Instance, props: any)
     
     self._connections = {}
     
-    -- Icon
     local iconLabel: ImageLabel? = nil
     local iconWidth = 0
     local isRightIcon = props.IconAlign == "Right"
@@ -4072,7 +4067,6 @@ function Button.new(parent: Instance, props: any)
         iconWidth = 26
     end
     
-    -- Trailing icon (right edge, vertically centered) - "click" affordance on every Button
     local trailingIcon = props.TrailingIcon
     if trailingIcon == nil then
         trailingIcon = "mouse-pointer-click"
@@ -4101,7 +4095,6 @@ function Button.new(parent: Instance, props: any)
         textAlignment = Enum.TextXAlignment.Right
     end
     
-    -- Text Container
     local titleColor = Theme.ResolveColor(props.TitleColor or props.Color)
     local descColor = Theme.ResolveColor(props.DescColor or props.DescriptionColor)
 
@@ -4141,7 +4134,6 @@ function Button.new(parent: Instance, props: any)
         Theme.Bind(descLabel, "TextColor3", "TextMuted")
     end
     
-	-- Micro-press feedback on card border/background into Center
 	self._feedback = {}
 	do
 		local h1 = Tweener.BindCardPressFeedback(container, btn, Vector2.new(4, 2))
@@ -4240,7 +4232,7 @@ end
 _MODULES['Elements/Divider'] = function()
 --!strict
 --[=[
-	Sodium UI v2 - Elements/Divider.luau
+	Pumpkin UI - Elements/Divider.luau
 	Flex-based separator. No AbsoluteSize listeners, no TextBounds math.
 	Supports LocalizedString titles.
 ]=]
@@ -4357,7 +4349,7 @@ end
 _MODULES['Elements/Toggle'] = function()
 --!strict
 --[=[
-    Sodium UI - Elements/Toggle.luau
+    Pumpkin UI - Elements/Toggle.luau
     Stateful switch with animated thumb slider.
     Refined: ApplyStrokeMode = Border, polished typography, and smooth thumb animation.
 ]=]
@@ -4474,7 +4466,6 @@ function Toggle.new(parent: Instance, props: any)
         end
     end
     
-    -- Toggle Switch Control (Apple iOS/macOS Pill Switch style)
     local switchTrack = Instance.new("Frame")
     switchTrack.Name = "SwitchTrack"
     switchTrack.Size = UDim2.fromOffset(36, 20)
@@ -4514,7 +4505,6 @@ function Toggle.new(parent: Instance, props: any)
     self.SwitchTrack = switchTrack
     self.TrackStroke = trackStroke
     self.Thumb = thumb
-    -- Backwards-compatibility aliases:
     self.CheckSquare = switchTrack
     self.CheckStroke = trackStroke
     self.CheckIcon = thumb
@@ -4662,7 +4652,7 @@ end
 _MODULES['Elements/Slider'] = function()
 --!strict
 --[=[
-    Sodium UI - Elements/Slider.luau
+    Pumpkin UI - Elements/Slider.luau
     Touch & Mouse draggable slider with integer/float snapping and numeric value badge.
     Refined: Compact control area (112px) giving maximum width to Title, zero truncation.
 ]=]
@@ -4750,7 +4740,6 @@ function Slider.new(parent: Instance, props: any)
         iconOffset = 22
     end
     
-    -- Left Text: Title & Desc take all space up to the 160px control cluster
     local titleColor = Theme.ResolveColor(props.TitleColor or props.Color)
     local descColor = Theme.ResolveColor(props.DescColor or props.DescriptionColor)
 
@@ -4787,7 +4776,6 @@ function Slider.new(parent: Instance, props: any)
         end
     end
     
-    -- Right side controls: Track + Gap + Editable Value Badge
     local controlArea = Instance.new("Frame")
     controlArea.Name = "ControlArea"
     controlArea.Size = UDim2.new(0, 160, 0, 24)
@@ -4795,7 +4783,6 @@ function Slider.new(parent: Instance, props: any)
     controlArea.AnchorPoint = Vector2.new(1, 0.5)
     controlArea.BackgroundTransparency = 1
     
-    -- Editable Value Badge (Direct manual input + numeric badge)
     local badge = Instance.new("Frame")
     badge.Name = "Badge"
     badge.Size = UDim2.fromOffset(42, 22)
@@ -4826,7 +4813,6 @@ function Slider.new(parent: Instance, props: any)
     badgeInput.Parent = badge
     badge.Parent = controlArea
     
-    -- Track Frame (24px height hit area for touch, inner visual bar is 4px)
     local track = Instance.new("TextButton")
     track.Name = "Track"
     track.Size = UDim2.new(1, -48, 0, 24)
@@ -5010,7 +4996,7 @@ function Slider.new(parent: Instance, props: any)
 			inputChangedConn = nil
 		end
 		setDragging(false)
-		-- sync badge once on release (avoid per-pixel Text layout thrash while dragging)
+		-- Synchronize badge text on input release to prevent per-pixel layout thrashing during drag.
 		if self.BadgeInput and not self.BadgeInput:IsFocused() then
 			local ds = if self.Step % 1 == 0
 				then string.format("%d", math.round(self.Value))
@@ -5069,7 +5055,7 @@ function Slider:Set(newVal: number, skipCallback: boolean?, animate: boolean?)
 		return
 	end
 
-	-- Single source of truth: clamp -> snap to Step -> clamp (skill round())
+	-- Canonical value resolution: clamp to bounds, snap to step interval, re-clamp.
 	local step = self.Step
 	if type(step) ~= "number" or step <= 0 then
 		step = 1
@@ -5108,7 +5094,7 @@ function Slider:Set(newVal: number, skipCallback: boolean?, animate: boolean?)
 		displayStr = string.format("%.1f", self.Value)
 	end
 
-	-- Real-time badge text update (even while dragging) - display number only without suffix
+	-- Update numeric display in real time during drag interactions.
 	if self.BadgeInput and not self.BadgeInput:IsFocused() then
 		self.BadgeInput.Text = displayStr
 	end
@@ -5198,7 +5184,7 @@ end
 _MODULES['Elements/Dropdown'] = function()
 --!strict
 --[=[
-    Sodium UI - Elements/Dropdown.luau
+    Pumpkin UI - Elements/Dropdown.luau
     Standard Obsidian Amethyst Popover Menu: Single-Select & Multi-Select.
     Features:
     - Built-in Case-Insensitive Search Filter (Upper/Lower case auto-filtered)
@@ -5319,7 +5305,6 @@ function Dropdown.new(parent: Instance, props: any, parentCard: GuiObject?)
     local isDesc = descProp and (if type(descProp) == "table" then true else descProp ~= "")
     local containerHeight = if isDesc then 54 else 42
     
-    -- Main Container inside Section Card
     local container = Instance.new("Frame")
     container.Name = "Dropdown_" .. tostring(titleText)
     container.Size = UDim2.new(1, 0, 0, containerHeight)
@@ -5357,7 +5342,6 @@ function Dropdown.new(parent: Instance, props: any, parentCard: GuiObject?)
         iconOffset = 22
     end
     
-    -- Left Text: Title & Description
     local titleColor = Theme.ResolveColor(props.TitleColor or props.Color)
     local descColor = Theme.ResolveColor(props.DescColor or props.DescriptionColor)
 
@@ -5394,7 +5378,6 @@ function Dropdown.new(parent: Instance, props: any, parentCard: GuiObject?)
         end
     end
     
-    -- Right Control: Trigger Button (Auto-expands to accommodate long text)
     local trigger = Instance.new("TextButton")
     trigger.Name = "Trigger"
     trigger.Size = UDim2.new(0, 140, 0, 30)
@@ -5448,7 +5431,6 @@ function Dropdown.new(parent: Instance, props: any, parentCard: GuiObject?)
         local fFace = selectedText.FontFace
         local fSize = selectedText.TextSize or 13
 
-        -- 1. Measure selected text width
         local curStr = tostring(selectedText.Text or "")
         if curStr ~= "" then
             local ok, sz = pcall(function()
@@ -5465,7 +5447,6 @@ function Dropdown.new(parent: Instance, props: any, parentCard: GuiObject?)
             end
         end
 
-        -- 2. Measure all option items width
         local normList = self._normalizedValues or normalizeValues(self.Values)
         for _, valItem in ipairs(normList) do
             local rawTitle = if type(valItem) == "table" 
@@ -5494,7 +5475,7 @@ function Dropdown.new(parent: Instance, props: any, parentCard: GuiObject?)
     end
     self.GetOptimalWidth = getOptimalWidth
     
-    -- Floating Popover List (Parented to Window level when opened)
+    -- Floating popover: reparented to window root during expansion to bypass ancestor clipping.
     local popover = Instance.new("Frame")
     popover.Name = "DropdownPopover_" .. tostring(titleText)
     popover.Size = UDim2.new(0, 140, 0, 0)
@@ -5522,7 +5503,6 @@ function Dropdown.new(parent: Instance, props: any, parentCard: GuiObject?)
     popPad.PaddingRight = UDim.new(0, 5)
     popPad.Parent = popover
     
-    -- Search Input Container inside Popover (Top Row)
     local searchContainer = Instance.new("Frame")
     searchContainer.Name = "SearchContainer"
     searchContainer.Size = UDim2.new(1, 0, 0, 26)
@@ -5567,7 +5547,6 @@ function Dropdown.new(parent: Instance, props: any, parentCard: GuiObject?)
     searchInput.ZIndex = 4502
     searchInput.Parent = searchContainer
     
-    -- Scrolling list for options
     local optionsList = Instance.new("ScrollingFrame")
     optionsList.Name = "OptionsList"
     optionsList.Size = UDim2.new(1, 0, 1, -30)
@@ -5868,7 +5847,7 @@ function Dropdown.new(parent: Instance, props: any, parentCard: GuiObject?)
     updateDisplay()
     updateOptionStates()
     
-    -- Realtime Search Listener (Case-Insensitive filter)
+    -- Real-time case-insensitive option filtering.
     searchInput:GetPropertyChangedSignal("Text"):Connect(function()
         self.SearchQuery = searchInput.Text
         filterOptions(self.SearchQuery)
@@ -5946,7 +5925,6 @@ function Dropdown:_updatePosition()
     
     local normList = self._normalizedValues or normalizeValues(self.Values)
     local optCount = #normList
-    -- 34px for Search row + items list
     local totalContentH = 34 + (optCount * 26) + math.max(0, optCount - 1) * 2 + 10
     local maxAllowedH = 220
     local targetH = math.clamp(totalContentH, 70, maxAllowedH)
@@ -5976,7 +5954,6 @@ function Dropdown:Open()
         self.UpdateOptionStates()
     end
     
-    -- Reset search query on open
     if self.SearchInput then
         self.SearchInput.Text = ""
     end
@@ -6057,7 +6034,6 @@ function Dropdown:Open()
         Rotation = 180
     })
     
-    -- Auto-track scrolling of tab
     local pageScroll = self.Trigger:FindFirstAncestorWhichIsA("ScrollingFrame")
     if pageScroll and pageScroll ~= self.OptionsList then
         if self._scrollConn then
@@ -6077,7 +6053,7 @@ function Dropdown:Open()
         end)
     end
     
-    -- Click outside auto-close listener
+    -- Close popover when clicking anywhere outside container.
     local openTime = os.clock()
     task.defer(function()
         if not self.IsOpen then return end
@@ -6326,7 +6302,7 @@ end
 _MODULES['Elements/Input'] = function()
 --!strict
 --[=[
-    Sodium UI - Elements/Input.luau
+    Pumpkin UI - Elements/Input.luau
     Text input field with placeholder, clear button, focus glow, and enter submit callback.
 ]=]
 
@@ -6387,7 +6363,6 @@ function Input.new(parent: Instance, props: any)
     pad.PaddingRight = UDim.new(0, 12)
     pad.Parent = container
     
-    -- Icon Support
     local iconOffset = 0
     if props.Icon and props.Icon ~= "" then
         local icon = Instance.new("ImageLabel")
@@ -6403,7 +6378,6 @@ function Input.new(parent: Instance, props: any)
         iconOffset = 22
     end
     
-    -- Title & Desc
     local titleColor = Theme.ResolveColor(props.TitleColor or props.Color)
     local descColor = Theme.ResolveColor(props.DescColor or props.DescriptionColor)
 
@@ -6440,7 +6414,6 @@ function Input.new(parent: Instance, props: any)
         end
     end
     
-    -- Input Box Frame (Width = 140px, Height = 30px to match Dropdown trigger exactly)
     local boxFrame = Instance.new("Frame")
     boxFrame.Name = "BoxFrame"
     boxFrame.Size = UDim2.new(0, 140, 0, 30)
@@ -6478,7 +6451,6 @@ function Input.new(parent: Instance, props: any)
     textBox.ClipsDescendants = true
     textBox.Parent = boxFrame
     
-    -- Clear button (x icon)
     local clearBtn = Instance.new("ImageButton")
     clearBtn.Name = "Clear"
     clearBtn.Size = UDim2.fromOffset(14, 14)
@@ -6513,7 +6485,6 @@ function Input.new(parent: Instance, props: any)
     
     Tweener.BindHoverLift(container, stroke)
     
-    -- Focus in/out glow animations with thickness and background tint
     table.insert(self._connections, textBox.Focused:Connect(function()
         Tweener.Tween(boxStroke, Tweener.Info.Fast, {
             Color = Theme.GetToken("BorderAccent"),
@@ -6565,7 +6536,6 @@ function Input.new(parent: Instance, props: any)
 		end
 	end))
     
-    -- Flag Registration
     
     container.Parent = parent
     return self
@@ -6659,7 +6629,7 @@ end
 _MODULES['Elements/Keybind'] = function()
 --!strict
 --[=[
-    Sodium UI - Elements/Keybind.luau
+    Pumpkin UI - Elements/Keybind.luau
     Dynamic key listener supporting Keyboard and Mouse buttons (M1/M2/M3) with listening badge.
     Refined: 82px badge width accommodating longer key names like RightBracket.
 ]=]
@@ -6771,7 +6741,6 @@ function Keybind.new(parent: Instance, props: any)
         end
     end
     
-    -- Key Display Badge / Trigger (Height 30px to match Dropdown trigger, min 68px, max 140px)
     local badge = Instance.new("TextButton")
     badge.Name = "KeyBadge"
     badge.Size = UDim2.new(0, 0, 0, 30)
@@ -7173,7 +7142,7 @@ end
 _MODULES['Elements/Paragraph'] = function()
 --!strict
 --[=[
-    Sodium UI - Elements/Paragraph.luau
+    Pumpkin UI - Elements/Paragraph.luau
     Informational card with title, rich description text, and optional action buttons.
 ]=]
 
@@ -7236,7 +7205,6 @@ function Paragraph.new(parent: Instance, props: any)
     list.Padding = UDim.new(0, 8)
     list.Parent = container
     
-    -- Header Row
     local header = Instance.new("Frame")
     header.Name = "Header"
     header.Size = UDim2.new(1, 0, 0, 20)
@@ -7297,7 +7265,6 @@ function Paragraph.new(parent: Instance, props: any)
         Theme.Bind(descLabel, "TextColor3", "TextMuted")
     end
     
-    -- Optional Action Buttons
     if props.Buttons and #props.Buttons > 0 then
         local btnRow = Instance.new("Frame")
         btnRow.Name = "ButtonRow"
@@ -7447,7 +7414,7 @@ end
 _MODULES['Elements/Stepper'] = function()
 --!strict
 --[=[
-    Sodium UI - Elements/Stepper.luau
+    Pumpkin UI - Elements/Stepper.luau
     Numeric Stepper Control:
     - Left text (Title + Description)
     - Right compact stepper capsule with [-], editable numeric value, and [+]
@@ -7537,7 +7504,6 @@ function Stepper.new(parent: Instance, props: any)
         iconOffset = 22
     end
     
-    -- Left Text: Title & Desc
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "Title"
     titleLabel.Size = UDim2.new(1, -iconOffset - 130, 0, 18)
@@ -7565,7 +7531,6 @@ function Stepper.new(parent: Instance, props: any)
         descLabel.Parent = container
     end
     
-    -- Right side controls: Stepper Capsule ([-] [ Value ] [+])
     local stepperFrame = Instance.new("Frame")
     stepperFrame.Name = "StepperControl"
     stepperFrame.Size = UDim2.new(0, 110, 0, 30)
@@ -7584,7 +7549,6 @@ function Stepper.new(parent: Instance, props: any)
     sStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     sStroke.Parent = stepperFrame
     
-    -- Minus Button [-] (AnchorPoint centered to prevent off-center scale animation)
     local minusBtn = Instance.new("TextButton")
     minusBtn.Name = "MinusButton"
     minusBtn.Size = UDim2.new(0, 28, 1, 0)
@@ -7605,7 +7569,6 @@ function Stepper.new(parent: Instance, props: any)
     Icons.Apply(minusIcon, "minus")
     minusIcon.Parent = minusBtn
     
-    -- Plus Button [+] (AnchorPoint centered to prevent off-center scale animation)
     local plusBtn = Instance.new("TextButton")
     plusBtn.Name = "PlusButton"
     plusBtn.Size = UDim2.new(0, 28, 1, 0)
@@ -7626,7 +7589,6 @@ function Stepper.new(parent: Instance, props: any)
     Icons.Apply(plusIcon, "plus")
     plusIcon.Parent = plusBtn
     
-    -- Value Input / Label in the center
     local valueBox = Instance.new("TextBox")
     valueBox.Name = "ValueBox"
     valueBox.Size = UDim2.new(1, -56, 1, 0)
@@ -7730,7 +7692,6 @@ function Stepper.new(parent: Instance, props: any)
         self:Set(snapped)
     end))
     
-    -- Button actions
     minusBtn.Activated:Connect(function()
         if self.Locked then return end
         self:Set(snap(self.Value - self.Step))
@@ -7741,7 +7702,6 @@ function Stepper.new(parent: Instance, props: any)
         self:Set(snap(self.Value + self.Step))
     end)
     
-    -- Button hover & click feedback
     minusBtn.MouseEnter:Connect(function()
         Tweener.Tween(minusIcon, Tweener.Info.Fast, { ImageColor3 = Theme.GetToken("TextPrimary") })
     end)
@@ -7858,7 +7818,7 @@ end
 _MODULES['Components/Primitives'] = function()
 --!strict
 --[=[
-	Sodium UI v2 - Components/Primitives.luau
+	Pumpkin UI - Components/Primitives.luau
 	Layout-safe Divider/Space/Tag. No TextBounds math, no AbsoluteSize
 	listeners. Theme.Bind for live SetTheme.
 ]=]
@@ -7993,7 +7953,7 @@ end
 _MODULES['Components/Notification'] = function()
 --!strict
 --[=[
-    Sodium UI - Components/Notification.luau
+    Pumpkin UI - Components/Notification.luau
     Non-intrusive, responsive toast alert system.
     Dynamically scales with screen dimensions, supports safe-area insets, and auto-stacks smoothly.
 ]=]
@@ -8023,7 +7983,7 @@ local function updateStackGeometry(stack: Frame)
     local vp = camera and camera.ViewportSize or Vector2.new(1920, 1080)
     local isSmallScreen = vp.X < 900 or vp.Y < 600
     
-    -- Responsive width: compact 210px on mobile screens, up to 260px on PC
+    -- Dynamic responsive toast width: 210px on mobile viewports up to 260px on desktop.
     local toastWidth = math.clamp(math.floor(vp.X * 0.24), 210, 260)
     local posY = if isSmallScreen then 48 else 20
     local posX = if isSmallScreen then -12 else -18
@@ -8062,7 +8022,7 @@ local function getOrCreateStack(root: Instance?): Frame?
         list.HorizontalAlignment = Enum.HorizontalAlignment.Right
         list.Parent = s
         
-        -- Auto adapt to screen resize / rotation
+        -- Dynamic viewport resize listener to adapt layout on orientation changes.
         local camera = workspace.CurrentCamera
         if camera then
             table.insert(stackConnections, camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
@@ -8090,7 +8050,7 @@ local function getOrCreateStack(root: Instance?): Frame?
                 s.Parent = root
             end)
             if not parentOk then
-                -- Fallback if root parenting is restricted by thread capability
+                -- Capability fallback: parent to PlayerGui if CoreGui is restricted by executor thread identity.
                 pcall(function()
                     local Players = game:GetService("Players")
                     local lp = Players.LocalPlayer
@@ -8155,7 +8115,7 @@ local function dismissToast(toastData: any)
 end
 
 function Notification.Notify(rootGui: Instance, props: NotifyProps)
-    -- Decouple notification dispatch via task.defer to run in scheduler context
+    -- Defers notification lifecycle into engine scheduler to prevent blocking caller thread.
     task.defer(function()
         local success, notifyErr = pcall(function()
             local stack = getOrCreateStack(rootGui)
@@ -8170,7 +8130,7 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
         dismissToast(activeToasts[1])
     end
     
-    -- Slot wrapper (for UIListLayout stability)
+    -- Layout slot wrapper: stabilizes UIListLayout while toast scales.
     local slot = Instance.new("Frame")
     slot.Name = "ToastSlot"
     slot.Size = UDim2.new(1, 0, 0, 0)
@@ -8178,7 +8138,7 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
     slot.BackgroundTransparency = 1
     slot.ClipsDescendants = false
     
-    -- Toast Card (CanvasGroup ensures all text, icons, and progress elements fade out smoothly together)
+    -- CanvasGroup ensures atomic alpha fade across text, icons, and progress elements.
     local toast = Instance.new("CanvasGroup")
     toast.Name = "ToastCard"
     toast.Size = UDim2.new(1, 0, 0, 0)
@@ -8207,7 +8167,6 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
     cardLayout.Padding = UDim.new(0, 0)
     cardLayout.Parent = toast
     
-    -- Content Frame
     local contentFrame = Instance.new("Frame")
     contentFrame.Name = "ContentFrame"
     contentFrame.Size = UDim2.new(1, 0, 0, 0)
@@ -8222,7 +8181,6 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
     pad.PaddingRight = UDim.new(0, 10)
     pad.Parent = contentFrame
     
-    -- Icon
     local iconLabel = Instance.new("ImageLabel")
     iconLabel.Name = "Icon"
     iconLabel.Size = UDim2.fromOffset(16, 16)
@@ -8233,7 +8191,6 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
     iconLabel.Parent = contentFrame
     Theme.Bind(iconLabel, "ImageColor3", "Accent")
     
-    -- Title
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "Title"
     titleLabel.Size = UDim2.new(1, -22, 0, 16)
@@ -8247,7 +8204,6 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
     titleLabel.Parent = contentFrame
     Theme.Bind(titleLabel, "TextColor3", "TextPrimary")
     
-    -- Content text
     if props.Content and (if type(props.Content) == "table" then true else props.Content ~= "") then
         local contentLabel = Instance.new("TextLabel")
         contentLabel.Name = "Content"
@@ -8266,7 +8222,6 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
     
     contentFrame.Parent = toast
     
-    -- Progress Bar
     local progressSlot = Instance.new("Frame")
     progressSlot.Name = "ProgressSlot"
     progressSlot.Size = UDim2.new(1, 0, 0, 4)
@@ -8311,12 +8266,10 @@ function Notification.Notify(rootGui: Instance, props: NotifyProps)
     }
     table.insert(activeToasts, toastData)
     
-    -- Smooth horizontal entrance animation
     Tweener.Tween(toast, Tweener.Info.Normal, {
         Position = UDim2.new(0, 0, 0, 0)
     })
     
-    -- Drain timer bar
     Tweener.Tween(progressBar, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
         Size = UDim2.new(0, 0, 1, 0)
     })
@@ -8334,7 +8287,7 @@ end
 _MODULES['Components/Popup'] = function()
 --!strict
 --[=[
-    Sodium UI - Components/Popup.luau
+    Pumpkin UI - Components/Popup.luau
     Modal Prompt with backdrop dimmer and spring-inspired scale transition.
 ]=]
 
@@ -8411,7 +8364,6 @@ function Popup.Show(rootGui: Instance, props: PopupProps)
     list.HorizontalAlignment = Enum.HorizontalAlignment.Center
     list.Parent = modal
     
-    -- Header Frame
     local header = Instance.new("Frame")
     header.Name = "Header"
     header.Size = UDim2.new(1, 0, 0, 24)
@@ -8446,7 +8398,6 @@ function Popup.Show(rootGui: Instance, props: PopupProps)
     title.ZIndex = 9999999
     title.Parent = header
     
-    -- Content Body
     local content = Instance.new("TextLabel")
     content.Name = "Content"
     content.Size = UDim2.new(1, 0, 0, 0)
@@ -8461,7 +8412,6 @@ function Popup.Show(rootGui: Instance, props: PopupProps)
     content.LayoutOrder = 2
     content.Parent = modal
     
-    -- Buttons Container
     local btnContainer = Instance.new("Frame")
     btnContainer.Name = "Buttons"
     btnContainer.Size = UDim2.new(1, 0, 0, 36)
@@ -8616,7 +8566,6 @@ function Popup.Show(rootGui: Instance, props: PopupProps)
     modal.Parent = backdrop
     backdrop.Parent = rootGui
     
-    -- Entrance Animation
     Tweener.Tween(backdrop, Tweener.Info.Fast, { BackgroundTransparency = 0.55 })
     Tweener.Tween(modal, Tweener.Info.Fast, { GroupTransparency = 0 })
     Tweener.Tween(modalScale, Tweener.Info.Spring, { Scale = 1.0 })
@@ -8628,7 +8577,7 @@ end
 _MODULES['Components/Dialog'] = function()
 --!strict
 --[=[
-    Sodium UI - Components/Dialog.luau
+    Pumpkin UI - Components/Dialog.luau
     Premium modal confirmation & alert dialog system with backdrop blur and smooth scale animations.
 ]=]
 
@@ -8679,7 +8628,6 @@ function Dialog.Show(parent: Instance, props: DialogProps)
     overlayCorner.CornerRadius = Theme.Radii.Window
     overlayCorner.Parent = overlay
     
-    -- Modal Card (Centered precisely within the UI window with smooth opacity transitions)
     local card = Instance.new("CanvasGroup")
     card.Name = "DialogCard"
     card.Size = UDim2.new(0.80, 0, 0, 0)
@@ -8709,7 +8657,7 @@ function Dialog.Show(parent: Instance, props: DialogProps)
     cardStroke.Parent = card
     Theme.Bind(cardStroke, "Color", "BorderSubtle")
     
-    -- Drop Shadow on Dialog (Parented to overlay behind card so AutomaticSize on card is not broken)
+    -- Decoupled drop shadow prevents parent AutomaticSize calculation breakage.
     local shadow = Instance.new("ImageLabel")
     shadow.Name = "DropShadow"
     shadow.BackgroundTransparency = 1
@@ -8754,7 +8702,6 @@ function Dialog.Show(parent: Instance, props: DialogProps)
     list.Padding = UDim.new(0, 12)
     list.Parent = card
     
-    -- Header Row (Title flush left + Optional Icon on Right)
     local header = Instance.new("Frame")
     header.Name = "Header"
     header.Size = UDim2.new(1, 0, 0, 24)
@@ -8790,7 +8737,6 @@ function Dialog.Show(parent: Instance, props: DialogProps)
     titleLabel.Parent = header
     Theme.Bind(titleLabel, "TextColor3", "TextPrimary")
     
-    -- Content Description
     local contentLabel = Instance.new("TextLabel")
     contentLabel.Name = "Content"
     contentLabel.Size = UDim2.new(1, 0, 0, 0)
@@ -8807,7 +8753,6 @@ function Dialog.Show(parent: Instance, props: DialogProps)
     contentLabel.Parent = card
     Theme.Bind(contentLabel, "TextColor3", "TextMuted")
     
-    -- Buttons Row
     local rawButtons = props.Buttons
     if not rawButtons or #rawButtons == 0 then
         rawButtons = {
@@ -8987,14 +8932,13 @@ function Dialog.Show(parent: Instance, props: DialogProps)
     card.Parent = overlay
     overlay.Parent = targetParent
     
-    -- Animate In with concurrent opacity fade & smooth scale
     Tweener.Tween(overlay, Tweener.Info.Fast, { BackgroundTransparency = 0.5 })
     Tweener.Tween(shadow, Tweener.Info.Fast, { ImageTransparency = 0.45 })
     Tweener.Tween(shadowScale, Tweener.Info.Spring, { Scale = 1 })
     Tweener.Tween(card, Tweener.Info.Fast, { GroupTransparency = 0 })
     Tweener.Tween(cardScale, Tweener.Info.Spring, { Scale = 1 })
     
-    -- Dismiss on background overlay click
+    -- Dismiss modal when clicking background overlay backdrop.
     overlay.Activated:Connect(function()
         closeDialog()
     end)
@@ -9012,7 +8956,7 @@ end
 _MODULES['Components/Loading'] = function()
 --!strict
 --[=[
-    Sodium UI - Components/Loading.luau
+    Pumpkin UI - Components/Loading.luau
     macOS Dynamic Island Morph Loader (Obsidian-Amethyst Capsule Progress Bar)
     Features:
     - Pure Vector/Frame rendering (No CanvasGroup font blurriness)
@@ -9055,7 +8999,6 @@ function Loading.new(rawProps: LoadingProps?)
     local titleText = props.Title or "Pumpkin Hub"
     local subText = props.Subtitle or { EN = "Preparing workspace & modules...", TH = "กำลังเตรียมระบบและโมดูล..." }
     
-    -- 1. Backdrop Overlay (Gentle ambient dimming)
     local backdrop = Instance.new("Frame")
     backdrop.Name = "LoadingBackdrop"
     backdrop.Size = UDim2.fromScale(1, 1)
@@ -9068,7 +9011,6 @@ function Loading.new(rawProps: LoadingProps?)
     backdrop.Parent = rootGui
     self.Backdrop = backdrop
     
-    -- 2. Ambient Black Glow (Concentric Capsule Shadow)
     local glowHolder = Instance.new("Frame")
     glowHolder.Name = "LoadingGlowHolder"
     glowHolder.Size = UDim2.fromOffset(340, 110)
@@ -9105,7 +9047,6 @@ function Loading.new(rawProps: LoadingProps?)
     self.GlowHolder = glowHolder
     self.GlowFrames = glowFrames
 
-    -- 3. Modern Floating Modal (macOS Capsule Card Style)
     local modal = Instance.new("Frame")
     modal.Name = "LoadingModal"
     modal.Size = UDim2.fromOffset(340, 110)
@@ -9141,7 +9082,6 @@ function Loading.new(rawProps: LoadingProps?)
     glowScale.Parent = glowHolder
     self.GlowScale = glowScale
 
-    -- Top Accent Glow Beam (Subtle ambient light strip at the top)
     local topBeam = Instance.new("Frame")
     topBeam.Name = "TopBeam"
     topBeam.Size = UDim2.new(1, 0, 0, 2)
@@ -9159,7 +9099,6 @@ function Loading.new(rawProps: LoadingProps?)
     pad.PaddingRight = UDim.new(0, 20)
     pad.Parent = modal
 
-    -- Header Row (Left Pulsing Icon + Title Stack + Right Percent Badge)
     local headerRow = Instance.new("Frame")
     headerRow.Name = "HeaderRow"
     headerRow.Size = UDim2.new(1, 0, 0, 42)
@@ -9168,7 +9107,6 @@ function Loading.new(rawProps: LoadingProps?)
     headerRow.ZIndex = 99993
     headerRow.Parent = modal
 
-    -- Rotating / Pulsing Icon
     local iconBadge = Instance.new("Frame")
     iconBadge.Name = "IconBadge"
     iconBadge.Size = UDim2.fromOffset(34, 34)
@@ -9209,7 +9147,6 @@ function Loading.new(rawProps: LoadingProps?)
     spinTween:Play()
     self._spinTween = spinTween
 
-    -- Center Text Stack
     local textStack = Instance.new("Frame")
     textStack.Name = "TextStack"
     textStack.Size = UDim2.new(1, -96, 1, 0)
@@ -9252,7 +9189,6 @@ function Loading.new(rawProps: LoadingProps?)
     Theme.Bind(subLabel, "TextColor3", "TextMuted")
     self.SubLabel = subLabel
 
-    -- Right Percentage Counter Badge
     local pctBadge = Instance.new("Frame")
     pctBadge.Name = "PctBadge"
     pctBadge.Size = UDim2.fromOffset(46, 22)
@@ -9289,7 +9225,6 @@ function Loading.new(rawProps: LoadingProps?)
     pctBadge.Parent = headerRow
     self.PctLabel = pctLabel
 
-    -- Bottom Progress Bar (Track & Fluid Amethyst Glow Fill)
     local track = Instance.new("Frame")
     track.Name = "ProgressTrack"
     track.Size = UDim2.new(1, 0, 0, 6)
@@ -9319,7 +9254,6 @@ function Loading.new(rawProps: LoadingProps?)
     fillCorner.CornerRadius = UDim.new(1, 0)
     fillCorner.Parent = fillBar
 
-    -- Entrance Transition (Lockstep smooth macOS pop)
     local entranceTween = Tweener.Info.MacOSWindowOpen
     Tweener.Tween(backdrop, Tweener.Info.Fast, { BackgroundTransparency = 0.55 })
     Tweener.Tween(modalScale, entranceTween, { Scale = 1.0 })
@@ -9328,7 +9262,6 @@ function Loading.new(rawProps: LoadingProps?)
         Tweener.Tween(item.Frame, entranceTween, { BackgroundTransparency = item.TargetTr })
     end
 
-    -- Optional Auto-simulate smooth progress if not manually driven
     local duration = props.Duration or 1.2
     if duration > 0 and (props.Progress == nil or props.Progress == 0) then
         self._autoThread = task.spawn(function()
@@ -9422,7 +9355,7 @@ end
 _MODULES['Components/KeyCheck'] = function()
 --!strict
 --[=[
-    Sodium UI - Components/KeyCheck.luau
+    Pumpkin UI - Components/KeyCheck.luau
     Obsidian Amethyst standalone authentication window with JNKIE Ultimate SDK,
     clipboard paste, remember-key toggle, rate limiting, and 4-state status badge.
 ]=]
@@ -9454,7 +9387,6 @@ export type KeyCheckProps = {
     OnSuccess: ((key: string, data: any?) -> ())?,
 }
 
--- Safe time function
 local function getSafeTimestamp(): number
     local t = os.time()
     if t and t > 1000000000 then return t end
@@ -9463,7 +9395,6 @@ local function getSafeTimestamp(): number
     return math.floor(tick())
 end
 
--- Safe executor environment accessor
 local function getExecutorFunc(name: string): any
     local genv = (type(getgenv) == "function" and getgenv()) or nil
     if genv and genv[name] ~= nil then return genv[name] end
@@ -9472,7 +9403,6 @@ local function getExecutorFunc(name: string): any
     return nil
 end
 
--- Executor file helpers
 local function safeWriteFile(filename: string, content: string): boolean
     local writef = getExecutorFunc("writefile")
     if type(writef) == "function" then
@@ -9548,7 +9478,7 @@ local function safeGetClipboard(): string?
     return nil
 end
 
--- JNKIE SDK Loader with Resilient Mock Fallback (Compliant with docs.jnkie.com)
+-- Jnkie SDK Loader with offline mock fallback (compliant with docs.jnkie.com).
 local function loadJunkieSDK(serviceName: string, identifier: string, provider: string): any
     local junkieObj = nil
     local success, _ = pcall(function()
@@ -9562,7 +9492,7 @@ local function loadJunkieSDK(serviceName: string, identifier: string, provider: 
     end)
     
     if not junkieObj or type(junkieObj) ~= "table" then
-        -- Mock Fallback Object for offline / studio / testing
+        -- Offline testing mock implementing official Jnkie API contracts.
         junkieObj = {
             service = serviceName,
             identifier = identifier,
@@ -9652,7 +9582,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     self.RememberKey = rememberKey
     self.IsVerifying = false
     
-    -- Check for cached key for auto-verify
     local cachedKey = nil
     local cachedExpiresAt = nil
     local cachedSavedAt = nil
@@ -9682,7 +9611,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     local rootGui = self.ContainerManager.ScreenGui
     self.RootGui = rootGui
     
-    -- Fullscreen Modal Backdrop
     local backdrop = Instance.new("Frame")
     backdrop.Name = "KeyCheckBackdrop"
     backdrop.Size = UDim2.fromScale(1, 1)
@@ -9693,7 +9621,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     backdrop.Parent = rootGui
     self.Backdrop = backdrop
     
-    -- Main KeyCheck Window
     local modal = Instance.new("Frame")
     modal.Name = "KeyCheckModal"
     modal.Size = UDim2.fromOffset(420, 310)
@@ -9735,7 +9662,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     list.Padding = UDim.new(0, 10)
     list.Parent = modal
     
-    -- 1. Header (Icon + Title + Close Button)
     local header = Instance.new("Frame")
     header.Name = "Header"
     header.Size = UDim2.new(1, 0, 0, 26)
@@ -9796,7 +9722,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
         self:Destroy()
     end)
     
-    -- Subtitle
     local subLabel = Instance.new("TextLabel")
     subLabel.Name = "Subtitle"
     subLabel.Size = UDim2.new(1, 0, 0, 16)
@@ -9810,7 +9735,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     subLabel.Parent = modal
     Theme.Bind(subLabel, "TextColor3", "TextMuted")
     
-    -- 2. Input Box Row (Placeholder: "Place key here", Lock Icon, Paste Button)
     local inputContainer = Instance.new("Frame")
     inputContainer.Name = "InputContainer"
     inputContainer.Size = UDim2.new(1, 0, 0, 40)
@@ -9902,7 +9826,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
         end
     end)
     
-    -- 3. Remember Me Checkbox Row
     local rememberRow = Instance.new("TextButton")
     rememberRow.Name = "RememberRow"
     rememberRow.Size = UDim2.new(1, 0, 0, 20)
@@ -9959,7 +9882,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
         })
     end)
     
-    -- 4. Status Badge Row (4 States: Ready, Verifying, Success, Error)
     local statusRow = Instance.new("Frame")
     statusRow.Name = "StatusRow"
     statusRow.Size = UDim2.new(1, 0, 0, 18)
@@ -10014,7 +9936,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
             statusText.TextColor3 = Theme.GetToken("Danger")
             statusText.Text = customMsg or "Invalid key! Please try again."
             
-            -- Shake animation on Modal
             task.spawn(function()
                 local origX = modal.Position.X.Offset
                 local origY = modal.Position.Y.Offset
@@ -10027,7 +9948,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     end
     self.SetStatus = setStatusState
     
-    -- 5. Redeem Button (Full-width, 38px, Theme Accent)
     local redeemBtn = Instance.new("TextButton")
     redeemBtn.Name = "RedeemBtn"
     redeemBtn.Size = UDim2.new(1, 0, 0, 38)
@@ -10067,7 +9987,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     redLabel.Parent = redeemBtn
     Tweener.BindPressFeedback(redeemBtn, redeemBtn, 0.97)
     
-    -- 6. Row of 3 Sub-Buttons (Get Key, Buy Key, Discord)
     local subRow = Instance.new("Frame")
     subRow.Name = "SubButtonsRow"
     subRow.Size = UDim2.new(1, 0, 0, 32)
@@ -10145,7 +10064,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     local buyKeyBtn = createSubButton("BuyKeyBtn", "shopping-cart", "Buy Key", 2)
     local discordBtn = createSubButton("DiscordBtn", "message-square", "Discord", 3)
     
-    -- Sub-Buttons Handlers
     getKeyBtn.Activated:Connect(function()
         local link = nil
         local err = nil
@@ -10185,7 +10103,7 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
     local function verifyKey(inputKey: string, isSilent: boolean?)
         if self.IsVerifying then return end
         local cleanKey = inputKey:gsub("^%s+", ""):gsub("%s+$", "")
-        -- Clean out non-breaking spaces, zero-width spaces, and enclosing quotes
+        -- Sanitizes license key: strips enclosing quotes, zero-width spaces, and control characters.
         cleanKey = cleanKey:gsub("[\194\160]", " "):gsub("[\226\128\139]", ""):gsub("^[\"\'`]+", ""):gsub("[\"\'`]+$", "")
         cleanKey = cleanKey:gsub("^%s+", ""):gsub("%s+$", "")
         
@@ -10202,7 +10120,7 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
             local res = nil
             local upper = cleanKey:upper():gsub("%s+", "")
             
-            -- Check for built-in testing / developer fallback keys first
+            -- Developer bypass: validates local test keys without remote network round-trips.
             if upper == "SODIUM-PREMIUM" or upper == "PREMIUM" then
                 task.wait(0.2)
                 res = {
@@ -10253,13 +10171,12 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
                 setStatusState("Success", "Authentication successful!")
                 redLabel.Text = "Unlocked!"
                 
-                -- Official Jnkie Handshake: SCRIPT_KEY environment variable
+                -- Handshake: sets SCRIPT_KEY in executor environment per Jnkie integration standard.
                 local genv = (type(getgenv) == "function" and getgenv()) or (rawget(getfenv(), "_G") :: any)
                 if genv then
                     genv.SCRIPT_KEY = cleanKey
                 end
                 
-                -- Determine plan and expiration
                 local upperKey = cleanKey:upper()
                 local isNormal = upperKey:find("NORMAL") ~= nil or upperKey:find("FREE") ~= nil
                 local isPrem = res.is_premium
@@ -10299,7 +10216,7 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
                 end
                 res.expires_at = keyExpires
                 
-                -- Save key if remember is checked
+                -- Persists license key to filesystem when "Remember Me" option is active.
                 if self.RememberKey then
                     safeWriteFile(saveFileName, HttpService:JSONEncode({
                         key = cleanKey,
@@ -10312,7 +10229,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
                     safeDeleteFile(saveFileName)
                 end
                 
-                -- Transition Exit
                 task.delay(0.3, function()
                     Tweener.Tween(modal, Tweener.Info.Fast, {
                         Position = UDim2.new(0.5, 0, 0.5, -20)
@@ -10371,7 +10287,6 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
                     safeDeleteFile(saveFileName)
                 end
                 
-                -- 3s Rate-limit Debounce
                 task.delay(3, function()
                     self.IsVerifying = false
                 end)
@@ -10383,11 +10298,9 @@ function KeyCheck.new(rawProps: KeyCheckProps?)
         verifyKey(keyBox.Text, false)
     end)
     
-    -- Entrance Animation
     Tweener.Tween(backdrop, Tweener.Info.Fast, { BackgroundTransparency = 0.5 })
     Tweener.Tween(modalScale, Tweener.Info.Smooth, { Scale = 1.0 })
     
-    -- Auto-verify if cached key was found
     if cachedKey and #cachedKey > 0 then
         task.defer(function()
             verifyKey(cachedKey, true)
@@ -10412,7 +10325,7 @@ end
 _MODULES['Components/TabSection'] = function()
 --!strict
 --[=[
-    Sodium UI - Components/TabSection.luau
+    Pumpkin UI - Components/TabSection.luau
     Sidebar Category Header Groups.
     Enhanced:
     - Clean typography (No icons in category header)
@@ -10457,7 +10370,6 @@ function TabSection.new(window: any, parent: Instance, rawProps: any)
     layout.Padding = UDim.new(0, 4)
     layout.Parent = container
     
-    -- Header Row
     local header = Instance.new("TextButton")
     header.Name = "Header"
     header.Size = UDim2.new(1, 0, 0, 24)
@@ -10471,7 +10383,6 @@ function TabSection.new(window: any, parent: Instance, rawProps: any)
     headerPad.PaddingRight = UDim.new(0, 8)
     headerPad.Parent = header
     
-    -- Title Label (No icon, clean typography)
     local title = Instance.new("TextLabel")
     title.Name = "Title"
     title.Size = if self.Collapsible then UDim2.new(1, -20, 1, 0) else UDim2.fromScale(1, 1)
@@ -10492,7 +10403,6 @@ function TabSection.new(window: any, parent: Instance, rawProps: any)
     Theme.Bind(title, "TextColor3", "Placeholder")
     title.Parent = header
     
-    -- Optional Chevron (Only if Collapsible = true)
     local chevron: ImageLabel? = nil
     if self.Collapsible then
         chevron = Instance.new("ImageLabel")
@@ -10515,7 +10425,6 @@ function TabSection.new(window: any, parent: Instance, rawProps: any)
             if not UserInputService.TouchEnabled then
                 Tweener.Tween(title, Tweener.Info.Fast, { TextColor3 = Theme.GetToken("TextPrimary") })
                 if chevron then
-                    -- Keep active rotation target (don't cancel rotation mid-flight)
                     local currentRot = if self.Opened then 0 else -90
                     Tweener.Tween(chevron, Tweener.Info.Fast, { ImageColor3 = Theme.GetToken("Accent"), Rotation = currentRot })
                 end
@@ -10532,7 +10441,6 @@ function TabSection.new(window: any, parent: Instance, rawProps: any)
         end))
     end
     
-    -- Tab List Container
     local tabList = Instance.new("Frame")
     tabList.Name = "TabList"
     tabList.Size = UDim2.new(1, 0, 0, 0)
@@ -10571,7 +10479,6 @@ function TabSection.new(window: any, parent: Instance, rawProps: any)
     self._sizeTween = nil
     self._chevronTween = nil
     
-    -- Initialize initial height
     if self.Opened then
         task.defer(function()
             if self.Opened and not self._isAnimating and tabList and tabLayout then
@@ -10652,7 +10559,6 @@ function TabSection:Toggle(opened: boolean?)
     end
     
     if self.Opened then
-        -- Expand
         self.TabList.Visible = true
         self.TabList.ClipsDescendants = true
         
@@ -10675,7 +10581,6 @@ function TabSection:Toggle(opened: boolean?)
             })
         end
     else
-        -- Collapse
         self.TabList.ClipsDescendants = true
         
         for _, tab in ipairs(self.Tabs) do
@@ -10725,7 +10630,7 @@ end
 _MODULES['Components/Section'] = function()
 --!strict
 --[=[
-    Sodium UI - Components/Section.luau
+    Pumpkin UI - Components/Section.luau
     macOS Grouped List Container:
     - Clean Header (Icon Badge + Title + Description)
     - Enclosing Solid Card Box around all child elements
@@ -10775,7 +10680,6 @@ function Section.new(parent: Instance, rawProps: any, window: any?)
     local descProp = props.Desc or props.Description
     local hasDesc = descProp and (if type(descProp) == "table" then true else descProp ~= "")
     
-    -- Outer Section Wrapper
     local sectionFrame = Instance.new("Frame")
     sectionFrame.Name = "Section_" .. Locale.Resolve(sectionTitle)
     sectionFrame.Size = UDim2.new(1, 0, 0, 0)
@@ -10797,7 +10701,6 @@ function Section.new(parent: Instance, rawProps: any, window: any?)
     secLayout.Padding = UDim.new(0, 8)
     secLayout.Parent = sectionFrame
     
-    -- 1. Section Header Row (Icon Badge + Title + Subtitle)
     local header = Instance.new("TextButton")
     header.Name = "Header"
     header.Size = UDim2.new(1, 0, 0, 0)
@@ -10878,7 +10781,6 @@ function Section.new(parent: Instance, rawProps: any, window: any?)
         chevron.Parent = header
     end
     
-    -- 2. Grouped Container Box (Single enclosed dark rounded box around all elements)
     local groupedBox = Instance.new("Frame")
     groupedBox.Name = "GroupedCardBox"
     groupedBox.Size = UDim2.new(1, 0, 0, 0)
@@ -11104,8 +11006,6 @@ function Section:Paragraph(props: any)
     return elem
 end
 
--- Manual labelled divider: it acts as its own separator, so it should not get an
--- extra hairline inserted before it, and the next element should not get one either.
 function Section:Divider(props: any)
     self._suppressAutoDivider = true
     local order = self:_beginRow()
@@ -11181,7 +11081,6 @@ function Section:AddConfigSection(rawProps: any?)
     local currentName = props.Default or "Main"
     win._selectedConfigName = currentName
 
-    -- 1. Input name config
     local configInput = self:Input({
         Title = { en = "Config Name", th = "ชื่อคอนฟิก" },
         Placeholder = "Enter config name...",
@@ -11195,7 +11094,6 @@ function Section:AddConfigSection(rawProps: any?)
         end,
     })
 
-    -- 2. Dropdown select config (auto update list)
     local initialConfigs = win:GetConfigs()
     local configDropdown = self:Dropdown({
         Title = { en = "Select Config", th = "เลือกคอนฟิก" },
@@ -11213,7 +11111,6 @@ function Section:AddConfigSection(rawProps: any?)
         end,
     })
 
-    -- Auto update list helper
     local function refreshDropdownList()
         local freshList = win:GetConfigs()
         if configDropdown and type(configDropdown.Refresh) == "function" then
@@ -11223,7 +11120,6 @@ function Section:AddConfigSection(rawProps: any?)
 
     win._onConfigListChanged = refreshDropdownList
 
-    -- 3. Button save
     local saveBtn = self:Button({
         Title = { en = "Save Config", th = "บันทึกคอนฟิก" },
         Icon = "save",
@@ -11234,7 +11130,6 @@ function Section:AddConfigSection(rawProps: any?)
         end,
     })
 
-    -- 4. Button load
     local loadBtn = self:Button({
         Title = { en = "Load Config", th = "โหลดคอนฟิก" },
         Icon = "folder-open",
@@ -11244,7 +11139,6 @@ function Section:AddConfigSection(rawProps: any?)
         end,
     })
 
-    -- 5. Button delete
     local deleteBtn = self:Button({
         Title = { en = "Delete Config", th = "ลบคอนฟิก" },
         Icon = "trash-2",
@@ -11255,7 +11149,6 @@ function Section:AddConfigSection(rawProps: any?)
         end,
     })
 
-    -- 6. Toggle autosave
     local savedAutoSave = win:GetAutoSaveConfig()
     local isAutoSaveOn = (savedAutoSave ~= nil and savedAutoSave ~= "" and savedAutoSave ~= "none") or (win._autoSaveEnabled == true)
     local autoSaveToggle = self:Toggle({
@@ -11268,7 +11161,6 @@ function Section:AddConfigSection(rawProps: any?)
     })
     win._autoSaveToggle = autoSaveToggle
 
-    -- 7. Toggle autoload
     local savedAutoLoad = win:GetAutoLoadConfig()
     local isAutoLoadOn = (savedAutoLoad ~= nil and savedAutoLoad ~= "" and savedAutoLoad ~= "none")
     local autoLoadToggle = self:Toggle({
@@ -11441,7 +11333,7 @@ end
 _MODULES['Components/Tab'] = function()
 --!strict
 --[=[
-    Sodium UI - Components/Tab.luau
+    Pumpkin UI - Components/Tab.luau
     Tab page layout supporting single-column vertical flow and dual-column grid (Karpiware style).
     Refined: Explicit non-overflowing column sizing (1, -34), eliminating right-edge clipping.
 ]=]
@@ -11479,7 +11371,6 @@ function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance,
     self.Active = false
     self._connections = {}
     
-    -- Sidebar Item Button
     local sidebarBtn = Instance.new("TextButton")
     sidebarBtn.Name = "TabBtn_" .. Locale.Resolve(tabTitle)
     sidebarBtn.Size = UDim2.new(1, 0, 0, 36)
@@ -11536,7 +11427,6 @@ function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance,
     self.TitleLabel = titleLabel
     self.IconLabel = iconLabel
     
-    -- Page Wrapper (Pure Frame for crisp, vector-sharp subpixel text at any scale/fullscreen)
     local pageWrapper = Instance.new("Frame")
     pageWrapper.Name = "PageWrapper_" .. Locale.Resolve(props.Title)
     pageWrapper.Size = UDim2.fromScale(1, 1)
@@ -11547,7 +11437,6 @@ function Tab.new(window: any, sidebarList: Instance, contentContainer: Instance,
     self.PageWrapper = pageWrapper
     self._pageTween = nil
 
-    -- Content Page Frame (ScrollingFrame)
     local page = Instance.new("ScrollingFrame")
     page.Name = "Page_" .. Locale.Resolve(props.Title)
     page.Size = UDim2.fromScale(1, 1)
@@ -11734,7 +11623,7 @@ function Tab:Deselect(_animated: boolean?)
         self._pageTween = nil
     end
 
-    -- Instant clean cut: old tab disappears IMMEDIATELY so content never overlaps/ghosts
+    -- Instant page swap: hides inactive tab immediately to eliminate visual overlapping/ghosting.
     self.PageWrapper.Visible = false
     self.PageWrapper.Position = UDim2.new(0, 0, 0, 0)
     self.SidebarButton.BackgroundTransparency = 1
@@ -11831,7 +11720,6 @@ function Tab:ServerCard(rawProps: any?)
     cardStroke.Parent = card
     Theme.Bind(cardStroke, "Color", "BorderSubtle")
 
-    -- Right Background Map Banner (Height matches Card 100%, Width ~220px, AnchorPoint 0.5, 0.5)
     local bgBanner = Instance.new("ImageLabel")
     bgBanner.Name = "BgMapBanner"
     bgBanner.Size = UDim2.new(0, 220, 1, 0)
@@ -11857,7 +11745,6 @@ function Tab:ServerCard(rawProps: any?)
     bgGradient.Parent = bgBanner
     bgBanner.Parent = card
 
-    -- Inner Content Wrapper (Applies padding only to interactive elements, not background banner)
     local cardContent = Instance.new("Frame")
     cardContent.Name = "CardContent"
     cardContent.Size = UDim2.fromScale(1, 1)
@@ -11874,7 +11761,6 @@ function Tab:ServerCard(rawProps: any?)
     cardPad.PaddingBottom = UDim.new(0, 12)
     cardPad.Parent = cardContent
 
-    -- Left: Game Thumbnail (Rounded Square, AnchorPoint 0.5, 0.5)
     local thumbFrame = Instance.new("Frame")
     thumbFrame.Name = "ThumbFrame"
     thumbFrame.Size = UDim2.fromOffset(60, 60)
@@ -11898,7 +11784,7 @@ function Tab:ServerCard(rawProps: any?)
 
     local targetPlaceId = game.PlaceId
     local targetGameId = game.GameId
-    -- Robust fallback: try GameIcon using GameId, fallback to PlaceId Asset thumbnail
+    -- Multi-tier thumbnail resolution: attempts GameId game icon, then falls back to PlaceId asset URI.
     if targetGameId and targetGameId > 0 then
         thumbImg.Image = string.format("rbxthumb://type=GameIcon&id=%d&w=150&h=150", targetGameId)
     else
@@ -11911,7 +11797,6 @@ function Tab:ServerCard(rawProps: any?)
     thumbImg.Parent = thumbFrame
     thumbFrame.Parent = cardContent
 
-    -- Right Content Column (AnchorPoint 0.5, 0.5)
     local contentCol = Instance.new("Frame")
     contentCol.Name = "ContentCol"
     contentCol.Size = UDim2.new(1, -74, 1, 0)
@@ -11927,7 +11812,6 @@ function Tab:ServerCard(rawProps: any?)
     colLayout.Padding = UDim.new(0, 2)
     colLayout.Parent = contentCol
 
-    -- Title Row: Game Name
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "GameTitle"
     titleLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -11941,7 +11825,6 @@ function Tab:ServerCard(rawProps: any?)
     titleLabel.Parent = contentCol
     Theme.Bind(titleLabel, "TextColor3", "TextPrimary")
 
-    -- Subtitle Row: "by [Creator]"
     local creatorLabel = Instance.new("TextLabel")
     creatorLabel.Name = "Creator"
     creatorLabel.Size = UDim2.new(1, 0, 0, 15)
@@ -11955,7 +11838,6 @@ function Tab:ServerCard(rawProps: any?)
     creatorLabel.Parent = contentCol
     Theme.Bind(creatorLabel, "TextColor3", "Placeholder")
 
-    -- Bottom Stats Row (ID, Players, Ping - Clean transparent labels)
     local pillsRow = Instance.new("Frame")
     pillsRow.Name = "PillsRow"
     pillsRow.Size = UDim2.new(1, 0, 0, 18)
@@ -11990,7 +11872,6 @@ function Tab:ServerCard(rawProps: any?)
     local playersText = createStatLabel("PlayersLabel", string.format("%d/%d", #Players:GetPlayers(), Players.MaxPlayers))
     local pingText = createStatLabel("PingLabel", "Ping 0 ms", true)
 
-    -- Auto-Fetch Live Game Info & Thumbnails
     task.spawn(function()
         pcall(function()
             local info = MarketplaceService:GetProductInfo(game.PlaceId)
@@ -12002,7 +11883,6 @@ function Tab:ServerCard(rawProps: any?)
                     local creatorName = (info.Creator and info.Creator.Name) or "Unknown"
                     creatorLabel.Text = "by " .. creatorName
                 end
-                -- If IconImageAssetId is present in product info, load direct asset
                 if info.IconImageAssetId and info.IconImageAssetId > 0 then
                     local assetUri = string.format("rbxassetid://%d", info.IconImageAssetId)
                     if thumbImg and thumbImg.Parent then
@@ -12027,7 +11907,6 @@ function Tab:ServerCard(rawProps: any?)
 
     local function updateStats()
         pcall(function()
-            -- 1. Real Player Count (Formatted strictly as "cur/max")
             if playersText and playersText.Parent then
                 local curPlayers = #Players:GetPlayers()
                 local maxPlayers = Players.MaxPlayers
@@ -12037,7 +11916,6 @@ function Tab:ServerCard(rawProps: any?)
                 end
             end
             
-            -- 2. True Realtime Hardware Ping (Instant sample every 0.15s, zero-overhead)
             if pingText and pingText.Parent then
                 local p = 0
                 if pingItem then
@@ -12056,10 +11934,9 @@ function Tab:ServerCard(rawProps: any?)
         end)
     end
 
-    -- Run immediate update on creation
     updateStats()
 
-    -- Real-time Ping & Player Count Updater loop (0.15s poll matches Roblox telemetry frequency perfectly)
+    -- Background 0.15s telemetry polling loop for real-time ping and player counts.
     local updaterThread = task.spawn(function()
         while card and card.Parent do
             updateStats()
@@ -12088,7 +11965,6 @@ function Tab:DashboardView(rawProps: any?)
     rootLayout.Padding = UDim.new(0, 14)
     rootLayout.Parent = root
 
-    -- 1. Breadcrumb Bar (General -> Dashboard, Version 1.0.0)
     local breadcrumbBar = Instance.new("Frame")
     breadcrumbBar.Name = "BreadcrumbBar"
     breadcrumbBar.Size = UDim2.new(1, 0, 0, 22)
@@ -12143,7 +12019,6 @@ function Tab:DashboardView(rawProps: any?)
     pageLabel.Parent = bcLeft
     Theme.Bind(pageLabel, "TextColor3", "Accent")
 
-    -- Premium Setting Button (Replaces "1.0.0" on top right of breadcrumb)
     local settingBtn = Instance.new("TextButton")
     settingBtn.Name = "SettingButton"
     settingBtn.Size = UDim2.fromOffset(88, 26)
@@ -12203,13 +12078,13 @@ function Tab:DashboardView(rawProps: any?)
             return
         end
 
-        -- Clean up any residual global blur to ensure 3D world is untouched
+        -- Hygiene cleanup: destroys lingering BlurEffects so game world rendering remains intact.
         pcall(function()
             local oldBlur = game:GetService("Lighting"):FindFirstChild("SodiumSettingsBlur")
             if oldBlur then oldBlur:Destroy() end
         end)
 
-        -- Scrim overlay strictly confined to UI Window (MainFrame)
+        -- Window-scoped scrim: confines backdrop dimming to MainFrame rather than entire screen.
         local overlay = Instance.new("TextButton")
         overlay.Name = "SettingsModalOverlay"
         overlay.Size = UDim2.fromScale(1, 1)
@@ -12233,7 +12108,6 @@ function Tab:DashboardView(rawProps: any?)
         ovGrad.Rotation = 45
         ovGrad.Parent = overlay
 
-        -- Modal Card (Structured matching Main UI window: 14px rounded corners, TopBar with Logo & Title, Theme background)
         local modal = Instance.new("Frame")
         modal.Name = "SettingsModalCard"
         modal.Size = UDim2.fromOffset(390, 240)
@@ -12260,7 +12134,6 @@ function Tab:DashboardView(rawProps: any?)
         mScale.Scale = 0.90
         mScale.Parent = modal
 
-        -- Modal TopBar (Matches Main UI TopBar structure with Logo & Brand Title)
         local mHeader = Instance.new("Frame")
         mHeader.Name = "TopBar"
         mHeader.Size = UDim2.new(1, 0, 0, 46)
@@ -12285,7 +12158,6 @@ function Tab:DashboardView(rawProps: any?)
         hlLayout.Padding = UDim.new(0, 8)
         hlLayout.Parent = hLeft
 
-        -- TopBar Logo Image (Matching Main UI logo 120284703484003)
         local hLogo = Instance.new("ImageLabel")
         hLogo.Name = "Logo"
         hLogo.Size = UDim2.fromOffset(28, 28)
@@ -12307,7 +12179,6 @@ function Tab:DashboardView(rawProps: any?)
         hTitle.Active = false
         hTitle.Parent = hLeft
 
-        -- Close Button with 100% Transparent Background (matching Main UI close control)
         local closeBtn = Instance.new("ImageButton")
         closeBtn.Name = "CloseButton"
         closeBtn.Size = UDim2.fromOffset(26, 26)
@@ -12329,7 +12200,6 @@ function Tab:DashboardView(rawProps: any?)
         closeIcon.Parent = closeBtn
         Tweener.BindPressFeedback(closeBtn, closeBtn)
 
-        -- Topbar Bottom Divider Line
         local hDivider = Instance.new("Frame")
         hDivider.Name = "BottomBorder"
         hDivider.Size = UDim2.new(1, 0, 0, 1)
@@ -12340,7 +12210,6 @@ function Tab:DashboardView(rawProps: any?)
         hDivider.Parent = mHeader
         Theme.Bind(hDivider, "BackgroundColor3", "BorderSubtle")
 
-        -- Content Body
         local mBody = Instance.new("Frame")
         mBody.Name = "Body"
         mBody.Size = UDim2.new(1, -32, 1, -56)
@@ -12438,7 +12307,6 @@ function Tab:DashboardView(rawProps: any?)
             return row, rightSlot
         end
 
-        -- Row 1: Language Switcher (EN / TH) with Smooth Sliding Indicator Animation
         local _, langSlot = createSettingRow("languages", "Language / ภาษา", "Interface display language • ภาษาที่ใช้แสดงผล")
         local langBtnBox = Instance.new("Frame")
         langBtnBox.Size = UDim2.new(1, 0, 0, 28)
@@ -12452,7 +12320,6 @@ function Tab:DashboardView(rawProps: any?)
 
         local currentLang = (win and win.GetLanguage and win:GetLanguage()) or "EN"
 
-        -- Smooth Sliding Pill Indicator
         local langIndicator = Instance.new("Frame")
         langIndicator.Name = "Indicator"
         langIndicator.Size = UDim2.new(0.5, -3, 1, -4)
@@ -12510,7 +12377,6 @@ function Tab:DashboardView(rawProps: any?)
         btnTH.Activated:Connect(function() updateLangSelection("TH") end)
         langBtnBox.Parent = langSlot
 
-        -- Row 2: Menu Keybind (Interactive & Rebindable)
         local _, keySlot = createSettingRow("key", "Menu Keybind", "Hotkey to toggle interface visibility")
         local keyBtn = Instance.new("TextButton")
         keyBtn.Name = "KeybindButton"
@@ -12573,7 +12439,6 @@ function Tab:DashboardView(rawProps: any?)
         keyBtn.Activated:Connect(startListening)
         keyBtn.Parent = keySlot
 
-        -- Row 3: Anti-AFK Switch (Interactive toggle across full row & track)
         local afkRow, afkSlot = createSettingRow("zap", "Anti-AFK", "Auto click & jump every 5 mins")
         local isAfkOn = (win and win._antiAfkEnabled == true)
 
@@ -12612,7 +12477,6 @@ function Tab:DashboardView(rawProps: any?)
         afkThumb.Parent = afkTrack
         afkTrack.Parent = afkSlot
 
-        -- Trigger button over the row content (behind the right slot so it doesn't block the switch)
         local afkTriggerBtn = Instance.new("TextButton")
         afkTriggerBtn.Name = "TriggerButton"
         afkTriggerBtn.Size = UDim2.new(1, -80, 1, 0)
@@ -12660,7 +12524,6 @@ function Tab:DashboardView(rawProps: any?)
         modal.Parent = overlay
         overlay.Parent = targetParent
 
-        -- Smooth Open Animation (Backdrop fade + Modal scale 0.90 -> 1.0)
         Tweener.Tween(overlay, TweenInfo.new(0.20), { BackgroundTransparency = 0.50 })
         Tweener.Tween(mScale, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1.0 })
 
@@ -12687,14 +12550,12 @@ function Tab:DashboardView(rawProps: any?)
     settingBtn.Parent = breadcrumbBar
     breadcrumbBar.Parent = root
 
-    -- 2. Hero Row (Welcome Card with Full Avatar Background Banner + Discord Action Button Card)
     local heroRow = Instance.new("Frame")
     heroRow.Name = "HeroRow"
     heroRow.Size = UDim2.new(1, 0, 0, 136)
     heroRow.BackgroundTransparency = 1
     heroRow.LayoutOrder = 2
 
-    -- 2A. Welcome Card (CanvasGroup strictly clips avatar background inside rounded border on resize)
     local heroCard = Instance.new("CanvasGroup")
     heroCard.Name = "HeroCard"
     heroCard.Size = UDim2.new(0.61, -6, 1, 0)
@@ -12708,7 +12569,6 @@ function Tab:DashboardView(rawProps: any?)
     heroCorner.CornerRadius = UDim.new(0, 14)
     heroCorner.Parent = heroCard
 
-    -- Map Background Image (Full Card Bleed with rounded corner clipping)
     local mapBg = Instance.new("ImageLabel")
     mapBg.Name = "MapBannerBackground"
     mapBg.Size = UDim2.fromScale(1, 1)
@@ -12724,7 +12584,7 @@ function Tab:DashboardView(rawProps: any?)
     mapCorner.CornerRadius = UDim.new(0, 14)
     mapCorner.Parent = mapBg
 
-    -- Fast default: load rbxthumb for GameThumbnail / GameIcon
+    -- Immediate synchronous placeholder via rbxthumb while asynchronous high-res asset resolves.
     local targetGameId = game.GameId
     local targetPlaceId = game.PlaceId
     if targetGameId and targetGameId > 0 then
@@ -12733,7 +12593,7 @@ function Tab:DashboardView(rawProps: any?)
         mapBg.Image = string.format("rbxthumb://type=Asset&id=%d&w=768&h=432", targetPlaceId)
     end
 
-    -- Asynchronous fetch for high-res official IconImageAssetId
+    -- Non-blocking remote query to retrieve high-resolution official asset icon ID.
     task.spawn(function()
         pcall(function()
             local MarketplaceService = game:GetService("MarketplaceService")
@@ -12748,7 +12608,6 @@ function Tab:DashboardView(rawProps: any?)
         end)
     end)
 
-    -- Dark Harmonious Amber/Obsidian Gradient Overlay
     local bgOverlay = Instance.new("Frame")
     bgOverlay.Name = "DarkOverlay"
     bgOverlay.Size = UDim2.fromScale(1, 1)
@@ -12785,7 +12644,6 @@ function Tab:DashboardView(rawProps: any?)
     heroStroke.Parent = heroCard
     Theme.Bind(heroStroke, "Color", "BorderAccent")
 
-    -- Welcome Text Stack (100% Transparent Background as requested)
     local heroTextStack = Instance.new("Frame")
     heroTextStack.Name = "TextStack"
     heroTextStack.Size = UDim2.new(1, -36, 0, 36)
@@ -12815,7 +12673,6 @@ function Tab:DashboardView(rawProps: any?)
 
     heroCard.Parent = heroRow
 
-    -- 2B. Discord Action Button Card (Click to copy https://discord.gg/2gEjXyQWKM, no background behind icon)
     local discordLink = "https://discord.gg/2gEjXyQWKM"
     local actionCard = Instance.new("ImageButton")
     actionCard.Name = "DiscordActionCard"
@@ -12903,7 +12760,6 @@ function Tab:DashboardView(rawProps: any?)
     reviewBtn.Parent = actionLeftCol
     Theme.Bind(reviewBtn, "TextColor3", "Accent")
 
-    -- Right Illustration: Discord Icon floating cleanly with NO background box
     local mailIcon = Instance.new("ImageLabel")
     mailIcon.Name = "DiscordIcon"
     mailIcon.Size = UDim2.fromOffset(30, 30)
@@ -12915,10 +12771,8 @@ function Tab:DashboardView(rawProps: any?)
     mailIcon.Parent = actionCard
     Theme.Bind(mailIcon, "ImageColor3", "Accent")
 
-    -- Unified scale press feedback for entire card and inner content
     Tweener.BindPressFeedback(actionCard, actionCard, 0.96)
 
-    -- Interactive micro-hover on link button
     reviewBtn.MouseEnter:Connect(function()
         Tweener.Tween(reviewBtn, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(0, 4, 0, 0) })
     end)
@@ -12926,7 +12780,6 @@ function Tab:DashboardView(rawProps: any?)
         Tweener.Tween(reviewBtn, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(0, 0, 0, 0) })
     end)
 
-    -- Dynamic click animation across entire card (live feedback instead of static text)
     local isCopyingAnim = false
     local function copyDiscord()
         local ok = false
@@ -12943,7 +12796,6 @@ function Tab:DashboardView(rawProps: any?)
             })
         end
 
-        -- Animated card reaction on click
         if not isCopyingAnim then
             isCopyingAnim = true
             reviewBtn.Text = "Copied! ✓"
@@ -12967,7 +12819,6 @@ function Tab:DashboardView(rawProps: any?)
     actionCard.Parent = heroRow
     heroRow.Parent = root
 
-    -- 3. Metrics Row (3 Stat Cards: Execute Time, Players Ingame, Whitelist - Amber Theme)
     local statsRow = Instance.new("Frame")
     statsRow.Name = "StatsRow"
     statsRow.Size = UDim2.new(1, 0, 0, 80)
@@ -13003,7 +12854,6 @@ function Tab:DashboardView(rawProps: any?)
         cardPad.PaddingRight = UDim.new(0, 10)
         cardPad.Parent = card
 
-        -- Icon Square Box (Deep Amber, Centered 38x38)
         local iconBox = Instance.new("Frame")
         iconBox.Name = "IconBox"
         iconBox.Size = UDim2.fromOffset(38, 38)
@@ -13026,7 +12876,6 @@ function Tab:DashboardView(rawProps: any?)
         Theme.Bind(ic, "ImageColor3", "Accent")
         iconBox.Parent = card
 
-        -- Text Column (Locked to exact height 38px matching iconBox, top is perfectly flush with icon top)
         local textCol = Instance.new("Frame")
         textCol.Name = "TextColumn"
         textCol.Size = UDim2.new(1, -48, 0, 38)
@@ -13078,20 +12927,16 @@ function Tab:DashboardView(rawProps: any?)
         return card, valLabel
     end
 
-    -- Card 1: Execute Time (Timer since script execution, e.g. 0days 0hr 1min 24sec)
     local cardExecuteTime, valExecuteTime = createStatCard("ExecuteTimeCard", "clock", "Execute Time", "0hr 0min 0sec", true, 1)
 
-    -- Card 2: Players Ingame (users_in_server / max_server, e.g. 22/50)
     local initialPlayerCount = math.max(22, #Players:GetPlayers())
     local maxPlayerLimit = math.max(50, Players.MaxPlayers)
     local cardPlayers, valPlayers = createStatCard("PlayersCard", "users", "Players Ingame", string.format("%d/%d", initialPlayerCount, maxPlayerLimit), false, 2)
 
-    -- Card 3: Whitelist (Check Junkie key / expiry, display days, hours, minutes, seconds)
     local cardWhitelist, valWhitelist = createStatCard("WhitelistCard", "shield-check", "Whitelist", "29days 12hr 39min 20sec", true, 3)
 
     statsRow.Parent = root
 
-    -- 4. Filter & Search Controls Row (Support count pill, Status dropdown, Search box)
     local ctrlRow = Instance.new("Frame")
     ctrlRow.Name = "ControlsRow"
     ctrlRow.Size = UDim2.new(1, 0, 0, 34)
@@ -13110,7 +12955,6 @@ function Tab:DashboardView(rawProps: any?)
     lfLayout.Padding = UDim.new(0, 8)
     lfLayout.Parent = leftFilters
 
-    -- Support (countmap) pill
     local supportPill = Instance.new("TextButton")
     supportPill.Name = "Pill_Support"
     supportPill.AutomaticSize = Enum.AutomaticSize.X
@@ -13136,7 +12980,6 @@ function Tab:DashboardView(rawProps: any?)
     spPad.Parent = supportPill
     supportPill.Parent = leftFilters
 
-    -- Status Filter Dropdown Trigger (Engineered to match real Dropdown component)
     local currentStatusFilter = "All"
     local statusDropdownBtn = Instance.new("TextButton")
     statusDropdownBtn.Name = "StatusDropdownTrigger"
@@ -13199,7 +13042,6 @@ function Tab:DashboardView(rawProps: any?)
     statusDropdownBtn.Parent = leftFilters
     Tweener.BindPressFeedback(statusDropdownBtn, statusDropdownBtn)
 
-    -- Status Dropdown Popover Menu (Matches Dropdown.luau with ZIndex 4500 and Fluid animation)
     local statusPopover = Instance.new("Frame")
     statusPopover.Name = "StatusPopover"
     statusPopover.Size = UDim2.fromOffset(150, 0)
@@ -13233,7 +13075,6 @@ function Tab:DashboardView(rawProps: any?)
     spPopPad.PaddingRight = UDim.new(0, 6)
     spPopPad.Parent = statusPopover
 
-    -- Search Input Field
     local searchFrame = Instance.new("Frame")
     searchFrame.Name = "SearchFrame"
     searchFrame.Size = UDim2.new(0, 185, 1, 0)
@@ -13279,7 +13120,6 @@ function Tab:DashboardView(rawProps: any?)
     searchFrame.Parent = ctrlRow
     ctrlRow.Parent = root
 
-    -- 5. Map Manager Table Card (Separate container card with 14px corners and subtle border)
     local mapCard = Instance.new("Frame")
     mapCard.Name = "MapManagerCard"
     mapCard.Size = UDim2.new(1, 0, 0, 0)
@@ -13311,7 +13151,6 @@ function Tab:DashboardView(rawProps: any?)
     tableLayout.Padding = UDim.new(0, 6)
     tableLayout.Parent = mapCard
 
-    -- Table Header Row: Map | Place ID | Update | Status | Actions
     local headerRow = Instance.new("Frame")
     headerRow.Name = "TableHeader"
     headerRow.Size = UDim2.new(1, 0, 0, 26)
@@ -13338,7 +13177,6 @@ function Tab:DashboardView(rawProps: any?)
     createColHeader("Status", 0.84, 0.15)
     headerRow.Parent = mapCard
 
-    -- Rows Container
     local rowsHolder = Instance.new("Frame")
     rowsHolder.Name = "RowsHolder"
     rowsHolder.Size = UDim2.new(1, 0, 0, 0)
@@ -13352,7 +13190,6 @@ function Tab:DashboardView(rawProps: any?)
     rhLayout.Parent = rowsHolder
     rowsHolder.Parent = mapCard
 
-    -- Slide Navigation Footer (Shows slide controls when maps exist)
     local slideFooter = Instance.new("Frame")
     slideFooter.Name = "SlideFooter"
     slideFooter.Size = UDim2.new(1, 0, 0, 32)
@@ -13455,7 +13292,6 @@ function Tab:DashboardView(rawProps: any?)
 
     mapCard.Parent = root
 
-    -- Fallback Supported Maps Data
     local defaultMapList = {
         {
             Name = "Anime Legacy Simulator",
@@ -13497,7 +13333,6 @@ function Tab:DashboardView(rawProps: any?)
     local activeMapList = defaultMapList
     local createdRowFrames = {}
 
-    -- Function to format date string from timestamp (e.g. 10/11/2026)
     local function formatUpdateDate(updatedStr: any): string
         if type(updatedStr) == "string" and updatedStr ~= "" then
             local y, m, d = string.match(updatedStr, "(%d%d%d%d)%-(%d%d)%-(%d%d)")
@@ -13508,8 +13343,7 @@ function Tab:DashboardView(rawProps: any?)
         return os.date("%d/%m/%Y")
     end
 
-    -- Fast, Universal Place ID Resolver & Image URI Builder
-    -- Supports: Full roblox.com URL, numeric PlaceId, rbxassetid, rbxthumb, or direct asset URI
+    -- Universal Place ID resolver: parses URLs, PlaceIds, asset IDs, and generates native image URIs.
     local function parsePlaceIdAndIcon(entry: any): (number, string)
         local rawIcon = entry.Icon or entry.Url or entry.Link or ""
         local rawPlaceId = entry.PlaceId or entry.PlaceID or entry.Id or entry.id
@@ -13521,7 +13355,6 @@ function Tab:DashboardView(rawProps: any?)
             placeIdNum = tonumber(rawPlaceId) or 0
         end
 
-        -- Extract PlaceId from Roblox game URL if PlaceId wasn't explicitly supplied
         if placeIdNum == 0 and type(rawIcon) == "string" then
             local matchedId = string.match(rawIcon, "games/(%d+)") or string.match(rawIcon, "roblox%.com/asset/%?id=(%d+)") or string.match(rawIcon, "(%d+)")
             if matchedId then
@@ -13529,7 +13362,6 @@ function Tab:DashboardView(rawProps: any?)
             end
         end
 
-        -- Generate instantaneous, zero-overhead Roblox native thumbnail URI
         local imageUri = ""
         if type(rawIcon) == "string" and (string.find(rawIcon, "rbxthumb://") or string.find(rawIcon, "rbxassetid://") or string.find(rawIcon, "http")) and not string.find(rawIcon, "roblox%.com/games/") then
             imageUri = rawIcon
@@ -13540,7 +13372,6 @@ function Tab:DashboardView(rawProps: any?)
         return placeIdNum, imageUri
     end
 
-    -- Status Resolver: Online (Green), Update (Orange), Risk (Red)
     local function resolveStatus(rawStatus: any): (string, Color3)
         local s = string.lower(tostring(rawStatus or "online"))
         if s:find("risk") or s:find("maint") or s:find("down") or s:find("red") or s:find("patch") then
@@ -13556,14 +13387,13 @@ function Tab:DashboardView(rawProps: any?)
     local currentSlide = 1
     local lastFilteredCount = 0
 
-    -- Rebuild Table Rows: exactly 5 maps per slide, zero overlap between Place ID and Update
+    -- Paginated map table renderer: 5 items per slide with proportional column widths.
     local function rebuildMapTable()
         for _, obj in ipairs(rowsHolder:GetChildren()) do
             if obj:IsA("Frame") then obj:Destroy() end
         end
         table.clear(createdRowFrames)
 
-        -- 1. Filter all entries first
         local query = string.lower(sInput.Text or "")
         local filtered = {}
         for _, mData in ipairs(activeMapList) do
@@ -13590,7 +13420,6 @@ function Tab:DashboardView(rawProps: any?)
 
         supportPill.Text = string.format("Support (%d)", #activeMapList)
 
-        -- Update slide footer info
         if totalFiltered > 0 then
             local startNum = (currentSlide - 1) * MAPS_PER_SLIDE + 1
             local endNum = math.min(totalFiltered, currentSlide * MAPS_PER_SLIDE)
@@ -13606,7 +13435,6 @@ function Tab:DashboardView(rawProps: any?)
         nextSlideBtn.BackgroundTransparency = if currentSlide >= totalSlides then 0.75 else 0
         nextSlideBtn.AutoButtonColor = (currentSlide < totalSlides)
 
-        -- 2. Render only the 5 maps on the current slide
         local startIdx = (currentSlide - 1) * MAPS_PER_SLIDE + 1
         local endIdx = math.min(totalFiltered, currentSlide * MAPS_PER_SLIDE)
 
@@ -13631,7 +13459,6 @@ function Tab:DashboardView(rawProps: any?)
             rStroke.Transparency = 0.5
             rStroke.Parent = row
 
-            -- 1. Map Column (Full Map Artwork + Name) - 38% width
             local mCol = Instance.new("Frame")
             mCol.Name = "MapColumn"
             mCol.Size = UDim2.new(0.38, 0, 1, 0)
@@ -13693,7 +13520,6 @@ function Tab:DashboardView(rawProps: any?)
             subPlace.LayoutOrder = 2
             subPlace.Parent = nameCol
 
-            -- 2. Place ID Column - 24% width (Position: 0.40, ends at 0.64 - Ample room, Zero Overlap!)
             local placeIdLabel = Instance.new("TextLabel")
             placeIdLabel.Name = "PlaceID"
             placeIdLabel.Size = UDim2.new(0.24, 0, 1, 0)
@@ -13706,7 +13532,6 @@ function Tab:DashboardView(rawProps: any?)
             placeIdLabel.TextTruncate = Enum.TextTruncate.None
             placeIdLabel.Parent = row
 
-            -- 3. Update Date Column - 16% width (Position: 0.66, ends at 0.82 - 20px gap after Place ID!)
             local updateLabel = Instance.new("TextLabel")
             updateLabel.Name = "UpdateDate"
             updateLabel.Size = UDim2.new(0.16, 0, 1, 0)
@@ -13718,7 +13543,6 @@ function Tab:DashboardView(rawProps: any?)
             updateLabel.TextXAlignment = Enum.TextXAlignment.Left
             updateLabel.Parent = row
 
-            -- Asynchronously fetch real update date and high-res official IconImageAssetId
             if placeIdNum > 0 then
                 task.spawn(function()
                     pcall(function()
@@ -13739,7 +13563,6 @@ function Tab:DashboardView(rawProps: any?)
                 end)
             end
 
-            -- 4. Status Column - 15% width (Position: 0.84, ends at 0.99 - Green/Online, Orange/Update, Red/Risk)
             local statusContainer = Instance.new("Frame")
             statusContainer.Name = "StatusContainer"
             statusContainer.Size = UDim2.new(0.15, 0, 1, 0)
@@ -13781,7 +13604,6 @@ function Tab:DashboardView(rawProps: any?)
         end
     end
 
-    -- Pagination slide button handlers
     prevSlideBtn.MouseButton1Click:Connect(function()
         if currentSlide > 1 then
             currentSlide = currentSlide - 1
@@ -13797,7 +13619,6 @@ function Tab:DashboardView(rawProps: any?)
         end
     end)
 
-    -- Filter Logic: Search + Status Dropdown
     local function applyMapFilter()
         currentSlide = 1
         rebuildMapTable()
@@ -13805,7 +13626,6 @@ function Tab:DashboardView(rawProps: any?)
 
     sInput:GetPropertyChangedSignal("Text"):Connect(applyMapFilter)
 
-    -- Status Dropdown Popover Options: All Status, Online, Update, Risk
     local statusOptions = {
         { Id = "All", Label = "All Status", Color = Color3.fromRGB(220, 220, 230), DotColor = Color3.fromRGB(156, 163, 175) },
         { Id = "Online", Label = "Online", Color = Color3.fromRGB(34, 197, 94), DotColor = Color3.fromRGB(34, 197, 94) },
@@ -13978,7 +13798,7 @@ function Tab:DashboardView(rawProps: any?)
         end
     end)
 
-    -- Close popover when clicking anywhere outside
+    -- Close popover when clicking anywhere outside container.
     UserInputService.InputBegan:Connect(function(input)
         if not isDropdownOpen then return end
         if (os.clock() - lastToggleClock) < 0.25 then return end
@@ -13996,11 +13816,9 @@ function Tab:DashboardView(rawProps: any?)
         end
     end)
 
-    -- Initial Table Render
     rebuildMapTable()
 
-    -- Asynchronous Remote Fetch from GitHub URL:
-    -- https://raw.githubusercontent.com/sodium-hub/ui/refs/heads/main/status.luau
+    -- Asynchronous remote catalog sync from official repository.
     task.spawn(function()
         pcall(function()
             local statusUrl = "https://raw.githubusercontent.com/sodium-hub/ui/refs/heads/main/status.luau"
@@ -14019,7 +13837,6 @@ function Tab:DashboardView(rawProps: any?)
         end)
     end)
 
-    -- Helpers to compute Whitelist & Execute times
     local function getWhitelistRemaining(): string
         local exp = props.KeyExpires
         local win = self.Window
@@ -14085,7 +13902,7 @@ function Tab:DashboardView(rawProps: any?)
 
     root.Parent = self.Container
 
-    -- Dynamic Live Telemetry Loop (Players 22/50, Whitelist Remaining, Execute Time)
+    -- Live telemetry loop updating execution runtime, server occupancy, and license expiration.
     task.spawn(function()
         while root and root.Parent do
             pcall(function()
@@ -14127,7 +13944,6 @@ function Tab:DiscordCard(rawProps: any?)
     cardStroke.Parent = card
     Theme.Bind(cardStroke, "Color", "BorderSubtle")
 
-    -- Inner Content Wrapper (Full width padding, no icon, no background banner)
     local cardContent = Instance.new("Frame")
     cardContent.Name = "CardContent"
     cardContent.Size = UDim2.fromScale(1, 1)
@@ -14144,7 +13960,6 @@ function Tab:DiscordCard(rawProps: any?)
     cardPad.PaddingBottom = UDim.new(0, 12)
     cardPad.Parent = cardContent
 
-    -- Left Content Column (Full width, AnchorPoint 0.5, 0.5)
     local contentCol = Instance.new("Frame")
     contentCol.Name = "ContentCol"
     contentCol.Size = UDim2.new(1, -140, 1, 0)
@@ -14160,7 +13975,6 @@ function Tab:DiscordCard(rawProps: any?)
     colLayout.Padding = UDim.new(0, 2)
     colLayout.Parent = contentCol
 
-    -- Title Row
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "DiscordTitle"
     titleLabel.Size = UDim2.new(1, 0, 0, 20)
@@ -14174,7 +13988,7 @@ function Tab:DiscordCard(rawProps: any?)
     titleLabel.Parent = contentCol
     Theme.Bind(titleLabel, "TextColor3", "TextPrimary")
 
-    -- Subtitle Row (the invite link)
+    
     local linkLabel = Instance.new("TextLabel")
     linkLabel.Name = "DiscordLink"
     linkLabel.Size = UDim2.new(1, 0, 0, 16)
@@ -14188,7 +14002,6 @@ function Tab:DiscordCard(rawProps: any?)
     linkLabel.Parent = contentCol
     Theme.Bind(linkLabel, "TextColor3", "Placeholder")
 
-    -- Right Capsule Pill (Copy Action Button / Pill)
     local copyPill = Instance.new("Frame")
     copyPill.Name = "CopyPill"
     copyPill.Size = UDim2.fromOffset(0, 28)
@@ -14231,11 +14044,10 @@ function Tab:DiscordCard(rawProps: any?)
     Theme.Bind(copyPillText, "TextColor3", "Accent")
     copyPill.Parent = cardContent
 
-    -- Micro-press feedback and hover lift matching Button.luau
     Tweener.BindCardPressFeedback(card, card, Vector2.new(4, 2))
     Tweener.BindHoverLift(card, cardStroke, Theme.GetToken("Card"), Theme.GetToken("SurfaceHover"), Theme.GetToken("BorderSubtle"), Theme.GetToken("BorderAccent"))
 
-    -- Copy Link To Clipboard + Toast Feedback
+    -- Copies invite link to system clipboard and dispatches feedback toast.
     card.Activated:Connect(function()
         local ok = false
         pcall(function()
@@ -14272,7 +14084,6 @@ function Tab:DiscordCard(rawProps: any?)
     return card
 end
 
--- Aliases for flexible API compatibility
 Tab.CreateSection = Tab.Section
 Tab.AddSection = Tab.Section
 Tab.CreateButton = Tab.Button
@@ -14341,7 +14152,7 @@ end
 _MODULES['Components/Window'] = function()
 --!strict
 --[=[
-    Sodium UI - Components/Window.luau
+    Pumpkin UI - Components/Window.luau
     Draggable Window Frame with minimize/close states, sidebar search, and user profile widget.
     Refined: Seamless rounded corners (zero square edge bleeding), consistent stroke modes.
 ]=]
@@ -14438,7 +14249,7 @@ function Window.new(containerManager: any, props: WindowProps)
     
     local windowTitle = props.Title or "Sodium Hub"
     
-    -- Register base size with Container for dynamic responsive scaling
+    -- Registers base resolution with ContainerManager for automatic viewport scale recalculation.
     containerManager:SetBaseWindowSize(Vector2.new(defaultSize.X.Offset, defaultSize.Y.Offset))
 
     local rawTitleStr = if type(windowTitle) == "table" then (windowTitle.en or windowTitle.EN or windowTitle.th or windowTitle.TH or "SodiumUI") else tostring(windowTitle or "SodiumUI")
@@ -14465,14 +14276,14 @@ function Window.new(containerManager: any, props: WindowProps)
     stroke.Parent = mainFrame
     Theme.Bind(stroke, "Color", "BorderSubtle")
     
-    -- WindowScale for hardware-accelerated entrance/exit micro-transitions
+    -- Dedicated UIScale instance for GPU-accelerated window transitions without layout reflows.
     local windowScale = Instance.new("UIScale")
     windowScale.Name = "WindowScale"
     windowScale.Scale = 1.0
     windowScale.Parent = mainFrame
     self.WindowScale = windowScale
     
-    -- Ambient Precision Concentric Glow Engine (Continuous Smooth Gradient Falloff)
+    -- Concentric multi-layer ambient shadow engine with continuous non-linear falloff.
     local glowHolder = Instance.new("Frame")
     glowHolder.Name = "WindowGlowHolder"
     glowHolder.Size = defaultSize
@@ -14482,7 +14293,6 @@ function Window.new(containerManager: any, props: WindowProps)
     glowHolder.ZIndex = 1
     glowHolder.Visible = true
 
-    -- Continuous 10-step micro-falloff (clean, perfectly balanced ambient shadow)
     local windowGlowFrames = {}
     for pad = 1, 10 do
         local t = (pad - 1) / 9 -- 0.0 (inner edge) to 1.0 (outer haze)
@@ -14527,7 +14337,6 @@ function Window.new(containerManager: any, props: WindowProps)
     mainFrame:GetPropertyChangedSignal("Position"):Connect(syncGlow)
     mainFrame:GetPropertyChangedSignal("Visible"):Connect(syncGlow)
     
-    -- Top Header Bar (Draggable, Transparent background to preserve rounded window corners)
     local topbar = Instance.new("Frame")
     topbar.Name = "TopBar"
     topbar.Size = UDim2.new(1, 0, 0, 48)
@@ -14535,7 +14344,6 @@ function Window.new(containerManager: any, props: WindowProps)
     topbar.BorderSizePixel = 0
     topbar.ZIndex = 3
     
-    -- Topbar Bottom Divider Line
     local topDivider = Instance.new("Frame")
     topDivider.Name = "BottomBorder"
     topDivider.Size = UDim2.new(1, 0, 0, 1)
@@ -14550,7 +14358,6 @@ function Window.new(containerManager: any, props: WindowProps)
     topPad.PaddingRight = UDim.new(0, 14)
     topPad.Parent = topbar
     
-    -- Title Container (Holds Logo Image and elevated Sodium Hub Brand Title)
     local titleContainer = Instance.new("Frame")
     titleContainer.Name = "TitleContainer"
     titleContainer.Size = UDim2.new(1, -106, 1, 0)
@@ -14567,7 +14374,6 @@ function Window.new(containerManager: any, props: WindowProps)
     titleLayout.SortOrder = Enum.SortOrder.LayoutOrder
     titleLayout.Parent = titleContainer
     
-    -- Main Window Logo (Direct Cloud Texture ID: 120284703484003)
     local defaultLogoId = "rbxassetid://120284703484003"
     local logoAsset = props.Logo or props.Icon or defaultLogoId
 
@@ -14583,7 +14389,6 @@ function Window.new(containerManager: any, props: WindowProps)
     self.WindowLogo = logoImg
     self.ResolvedLogo = tostring(logoImg.Image)
 
-    -- Brand Text Wrapper (Matches 40px logo height, holds raised Sodium Hub text)
     local brandHolder = Instance.new("Frame")
     brandHolder.Name = "BrandHolder"
     brandHolder.Size = UDim2.fromOffset(0, 40)
@@ -14593,7 +14398,6 @@ function Window.new(containerManager: any, props: WindowProps)
     brandHolder.ZIndex = 4
     brandHolder.Parent = titleContainer
 
-    -- Animated Gradient Title: "Sodium Hub" (Elevated slightly above the lowest logo line)
     local brandTitle = Instance.new("TextLabel")
     brandTitle.Name = "BrandTitle"
     brandTitle.Size = UDim2.fromOffset(0, 24)
@@ -14612,7 +14416,6 @@ function Window.new(containerManager: any, props: WindowProps)
     brandTitle.TextYAlignment = Enum.TextYAlignment.Bottom
     brandTitle.ZIndex = 4
 
-    -- High-End Luxury Amber Sheen Gradient
     local titleGradient = Instance.new("UIGradient")
     titleGradient.Name = "BrandGradient"
     titleGradient.Rotation = 15
@@ -14630,7 +14433,7 @@ function Window.new(containerManager: any, props: WindowProps)
     self.BrandTitle = brandTitle
     self.TitleGradient = titleGradient
 
-    -- Fluid Sinusoidal Sheen Sweep (Reverses smoothly, zero sudden snap, pure luxury flow)
+    -- Continuous sinusoidal UIGradient sheen sweep with smooth cycle reversal.
     local gradTween = TweenService:Create(
         titleGradient,
         TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
@@ -14639,7 +14442,6 @@ function Window.new(containerManager: any, props: WindowProps)
     gradTween:Play()
     self._brandGradTween = gradTween
 
-    -- Dummy TitleLabel for backward-compatibility API calls
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "Title"
     titleLabel.Size = UDim2.new(0, 0, 0, 0)
@@ -14648,7 +14450,6 @@ function Window.new(containerManager: any, props: WindowProps)
     self.TitleLabel = titleLabel
     self.TitleContainer = titleContainer
     
-    -- Backward-compatible no-op Tag methods (Tags removed completely from UI)
     local emptyTagController = {
         SetTitle = function() end,
         SetColor = function() end,
@@ -14664,7 +14465,6 @@ function Window.new(containerManager: any, props: WindowProps)
     function self:SetKeyExpiry(_expires: any)
     end
     
-    -- Top-Right Window Controls: Minimize, FullScreen, Close (Left to Right, Frameless Transparent Background)
     local controls = Instance.new("Frame")
     controls.Name = "Controls"
     controls.Size = UDim2.new(0, 86, 1, 0)
@@ -14680,7 +14480,6 @@ function Window.new(containerManager: any, props: WindowProps)
     controlLayout.Padding = UDim.new(0, 4)
     controlLayout.Parent = controls
     
-    -- 1. Minimize Button Slot & Button (Icon "minus", Transparent Background)
     local minSlot = Instance.new("Frame")
     minSlot.Name = "MinSlot"
     minSlot.Size = UDim2.fromOffset(26, 26)
@@ -14712,7 +14511,6 @@ function Window.new(containerManager: any, props: WindowProps)
     minSlot.Parent = controls
     Tweener.BindPressFeedback(minBtn, minBtn)
     
-    -- 2. FullScreen Button Slot & Button (Icon "square", Transparent Background)
     local fullSlot = Instance.new("Frame")
     fullSlot.Name = "FullScreenSlot"
     fullSlot.Size = UDim2.fromOffset(26, 26)
@@ -14744,7 +14542,6 @@ function Window.new(containerManager: any, props: WindowProps)
     fullSlot.Parent = controls
     Tweener.BindPressFeedback(fullBtn, fullBtn)
     
-    -- 3. Close Button Slot & Button (Icon "x", Transparent Background)
     local closeSlot = Instance.new("Frame")
     closeSlot.Name = "CloseSlot"
     closeSlot.Size = UDim2.fromOffset(26, 26)
@@ -14776,7 +14573,6 @@ function Window.new(containerManager: any, props: WindowProps)
     closeSlot.Parent = controls
     Tweener.BindPressFeedback(closeBtn, closeBtn)
     
-    -- Controls ultra-smooth spring/back hover scale animations (Fixed White Color)
     local smoothScaleIn = TweenInfo.new(0.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
     local smoothScaleOut = TweenInfo.new(0.20, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
     
@@ -14804,7 +14600,6 @@ function Window.new(containerManager: any, props: WindowProps)
     controls.Parent = topbar
     topbar.Parent = mainFrame
     
-    -- Body Frame (Contains Sidebar & Content Area)
     local body = Instance.new("Frame")
     body.Name = "Body"
     body.Size = UDim2.new(1, 0, 1, -48)
@@ -14812,7 +14607,6 @@ function Window.new(containerManager: any, props: WindowProps)
     body.BackgroundTransparency = 1
     body.ClipsDescendants = false
     
-    -- Sidebar
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
     sidebar.Size = UDim2.new(0, sideBarWidth, 1, 0)
@@ -14828,7 +14622,6 @@ function Window.new(containerManager: any, props: WindowProps)
     sideDivider.Parent = sidebar
     Theme.Bind(sideDivider, "BackgroundColor3", "BorderSubtle")
     
-    -- Sidebar Content Layout
     local searchOffset = 0
     if not props.HideSearchBar then
         searchOffset = 46
@@ -14881,10 +14674,8 @@ function Window.new(containerManager: any, props: WindowProps)
         self.SearchBox = searchBox
     end
     
-    -- Sidebar Header Height Calculation
     local headerHeight = if not props.HideSearchBar then 52 else 12
 
-    -- Sidebar Footer Height Calculation (Footer removed: Anonymous, Theme, Translate, Discord, Profile)
     local footerHeight = 12
     
     if props.User and props.User.KeyExpires then
@@ -14910,7 +14701,6 @@ function Window.new(containerManager: any, props: WindowProps)
         return Locale.Changed:Connect(callback)
     end
     
-    -- Scrollable Sidebar Tab List (Clean Tier 2 Dock Viewport with Smooth Elastic Touch Scrolling)
     local tabList = Instance.new("ScrollingFrame")
     tabList.Name = "TabList"
     tabList.Size = UDim2.new(1, -20, 1, -(headerHeight + footerHeight))
@@ -14944,7 +14734,6 @@ function Window.new(containerManager: any, props: WindowProps)
     tabList.ZIndex = 2
     tabList.Parent = sidebar
     
-    -- Sliding Active Tab Indicator Overlay (Interpolates cleanly underneath transparent tab buttons)
     local tabIndicatorOverlay = Instance.new("Frame")
     tabIndicatorOverlay.Name = "TabIndicatorOverlay"
     tabIndicatorOverlay.Size = tabList.Size
@@ -14956,7 +14745,6 @@ function Window.new(containerManager: any, props: WindowProps)
     tabIndicatorOverlay.Parent = sidebar
     self.TabIndicatorOverlay = tabIndicatorOverlay
     
-    -- 1. Hover Tracker Pill (Smooth dynamic highlight tracking cursor over inactive tabs)
     local hoverTracker = Instance.new("Frame")
     hoverTracker.Name = "HoverTracker"
     hoverTracker.Size = UDim2.fromOffset(0, 36)
@@ -14975,7 +14763,6 @@ function Window.new(containerManager: any, props: WindowProps)
     self.HoverTracker = hoverTracker
     self._hoverTrackerTween = nil
     
-    -- 2. Persistent Active Tab Indicator (With inset accent bar and glowing stroke)
     local tabIndicator = Instance.new("Frame")
     tabIndicator.Name = "ActiveTabIndicator"
     tabIndicator.Size = UDim2.fromOffset(0, 36)
@@ -15017,7 +14804,7 @@ function Window.new(containerManager: any, props: WindowProps)
     
     self.TabIndicator = tabIndicator
     
-    -- Real-time hardware scroll synchronization
+    -- Synchronizes active indicator vertical coordinates with ScrollingFrame CanvasPosition.
     tabList:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
         self:UpdateIndicator(true)
     end)
@@ -15032,7 +14819,6 @@ function Window.new(containerManager: any, props: WindowProps)
     
     sidebar.Parent = body
     
-    -- Content Viewport (Hosts Tabs)
     local contentArea = Instance.new("Frame")
     contentArea.Name = "ContentArea"
     contentArea.Size = UDim2.new(1, -sideBarWidth, 1, 0)
@@ -15043,7 +14829,6 @@ function Window.new(containerManager: any, props: WindowProps)
     
     body.Parent = mainFrame
     
-    -- macOS-Style Corner Resize Handle (Single Concentric Quarter-Arc)
     local resizeHandle = Instance.new("ImageButton")
     resizeHandle.Name = "ResizeHandle"
     resizeHandle.Size = UDim2.fromOffset(24, 24)
@@ -15053,7 +14838,6 @@ function Window.new(containerManager: any, props: WindowProps)
     resizeHandle.AutoButtonColor = false
     resizeHandle.ZIndex = 50
     
-    -- Bottom-Right Quadrant Clipper (Masks everything outside the corner sector)
     local arcClipper = Instance.new("Frame")
     arcClipper.Name = "ArcClipper"
     arcClipper.Size = UDim2.fromOffset(14, 14)
@@ -15063,7 +14847,6 @@ function Window.new(containerManager: any, props: WindowProps)
     arcClipper.ClipsDescendants = true
     arcClipper.ZIndex = 51
     
-    -- Exact Concentric Quarter-Arc (Concentric with Window Corner 14px, Radius 9px, Offset 5px)
     local arcCircle = Instance.new("Frame")
     arcCircle.Name = "ArcCircle"
     arcCircle.Size = UDim2.fromOffset(18, 18)
@@ -15088,7 +14871,6 @@ function Window.new(containerManager: any, props: WindowProps)
     resizeHandle.Parent = mainFrame
     self.ResizeHandle = resizeHandle
 
-    -- Hover & Press micro-feedback on resize handle
     local resizeScale = Instance.new("UIScale")
     resizeScale.Scale = 1.0
     resizeScale.Parent = resizeHandle
@@ -15111,7 +14893,7 @@ function Window.new(containerManager: any, props: WindowProps)
     self.DefaultSize = defaultSize
     self._mounted = true
     
-    -- Floating Minimized Widget: Dynamic Island style pill (Lens + Sodium Hub + Status Dot)
+    -- Minimized Dynamic Island widget: persistent compact pill with camera sensor lens and status dot.
     local ISLAND_W = 158
     local ISLAND_H = 36
     local SHADOW_PAD = 12
@@ -15139,7 +14921,6 @@ function Window.new(containerManager: any, props: WindowProps)
     minWidgetStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     minWidgetStroke.Parent = minWidget
 
-    -- Lens sensor container (left)
     local lensFrame = Instance.new("Frame")
     lensFrame.Name = "LensSensor"
     lensFrame.Size = UDim2.fromOffset(22, 22)
@@ -15165,7 +14946,7 @@ function Window.new(containerManager: any, props: WindowProps)
     Icons.Apply(lensIcon, "camera")
     lensIcon.Parent = lensFrame
 
-    -- Center Title Label (Fixed to "Sodium Hub" strictly)
+    -- Minimized Dynamic Island title permanently fixed to "Sodium Hub".
     local islandTitle = Instance.new("TextLabel")
     islandTitle.Name = "IslandTitle"
     islandTitle.Size = UDim2.new(1, -66, 1, 0)
@@ -15180,7 +14961,6 @@ function Window.new(containerManager: any, props: WindowProps)
     islandTitle.ZIndex = 3
     islandTitle.Parent = minWidget
 
-    -- Right Status Dot (Accent indicator)
     local statusDot = Instance.new("Frame")
     statusDot.Name = "StatusDot"
     statusDot.Size = UDim2.fromOffset(7, 7)
@@ -15196,7 +14976,6 @@ function Window.new(containerManager: any, props: WindowProps)
     dotCorner.CornerRadius = UDim.new(1, 0)
     dotCorner.Parent = statusDot
 
-    -- Dynamic Island Soft Black Glow (Continuous Smooth Capsule Falloff)
     local minShadowHolder = Instance.new("Frame")
     minShadowHolder.Name = "MinWidgetGlowHolder"
     minShadowHolder.Size = UDim2.fromScale(1, 1)
@@ -15204,7 +14983,6 @@ function Window.new(containerManager: any, props: WindowProps)
     minShadowHolder.BackgroundTransparency = 1
     minShadowHolder.ZIndex = 1
 
-    -- Continuous 8-step micro-falloff (clean, perfectly balanced capsule shadow)
     local minWidgetGlowFrames = {}
     for pad = 1, 8 do
         local t = (pad - 1) / 7
@@ -15234,7 +15012,6 @@ function Window.new(containerManager: any, props: WindowProps)
     minWidgetScale.Scale = 1
     minWidgetScale.Parent = minWidget
 
-    -- Dynamic Island Micro-interactions (Hover lift & Press feedback)
     minWidget.MouseEnter:Connect(function()
         Tweener.Tween(minWidgetStroke, Tweener.Info.Fast, { Color = Theme.GetToken("Accent") })
         Tweener.Tween(islandTitle, Tweener.Info.Fast, { TextColor3 = Color3.fromRGB(255, 255, 255) })
@@ -15258,19 +15035,15 @@ function Window.new(containerManager: any, props: WindowProps)
     self.MinWidgetScale = minWidgetScale
 
     self:_initDraggableWidget(minWidget, function()
-        -- Dynamic Island Pop-open expansion feedback
         Tweener.Tween(minWidgetScale, Tweener.Info.MacOSSpring, { Scale = 1.12 }, function()
             self:ToggleVisibility()
         end)
     end)
 
-    -- Window Dragging Engine
     self:_initDragging(topbar)
     
-    -- Window Resizing Engine (Bottom-Right Drag Handle)
     self:_initResizing(resizeHandle)
     
-    -- Window Controls: Minimize, FullScreen, True Close Termination
     minBtn.Activated:Connect(function()
         self:ToggleVisibility()
     end)
@@ -15292,7 +15065,6 @@ function Window.new(containerManager: any, props: WindowProps)
                     Title = { en = "Cancel", th = "ยกเลิก" },
                     Style = "Default",
                     Callback = function()
-                        -- Keep window open
                     end
                 },
                 {
@@ -15306,7 +15078,7 @@ function Window.new(containerManager: any, props: WindowProps)
         })
     end)
     
-    -- ToggleKey Listener (Works for LeftShift, ShiftLock, and all modifier keys)
+    -- Window toggle listener: handles modifier keys, shift-lock, and standard keybinds.
     self._toggleKeyConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if UserInputService:GetFocusedTextBox() ~= nil then
             return
@@ -15325,7 +15097,7 @@ function Window.new(containerManager: any, props: WindowProps)
         end
     end)
     
-    -- Sidebar Search Engine (Deep Element & Tab Universal Search)
+    -- Universal search engine: recursively queries sections and elements across all tabs.
     if self.SearchBox then
         self.SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
             local query = string.lower(self.SearchBox.Text)
@@ -15379,10 +15151,9 @@ function Window.new(containerManager: any, props: WindowProps)
                 end
             end
 
-            -- Update tab indicator lock
             self:UpdateIndicator(true)
 
-            -- Automatically navigate to the first matching tab if current tab has no matches
+            -- Auto-navigation: switches to first tab containing matching results during active search.
             if isSearching and firstMatchedTab and (not self.CurrentTab or not self.CurrentTab.SidebarButton.Visible) then
                 self:SelectTab(firstMatchedTab)
             end
@@ -15395,7 +15166,7 @@ function Window.new(containerManager: any, props: WindowProps)
         g._SODIUM_ACTIVE_WINDOW = self
     end
     
-    -- Built-in Persistent "General" TabSection with default "Dashboard" Tab (matching screenshot)
+    -- Built-in default General section hosting persistent Dashboard telemetry view.
     local overviewSection = self:Section({
         Title = { EN = "General", TH = "ทั่วไป" },
         Collapsible = false,
@@ -15405,7 +15176,6 @@ function Window.new(containerManager: any, props: WindowProps)
         Icon = "layout-dashboard",
     })
 
-    -- Add exact image-matched DashboardView
     local dashboardView = dashboardTab:DashboardView({
         Category = "General",
         CurrentPage = "Dashboard",
@@ -15417,7 +15187,7 @@ function Window.new(containerManager: any, props: WindowProps)
     self.OverviewSection = overviewSection
     self.DashboardTab = dashboardTab
 
-    -- Start Anti-AFK Engine immediately (Silent, enabled by default)
+    -- Initializes Anti-AFK engine immediately on startup (silent operation by default).
     local genv = (type(getgenv) == "function" and getgenv()) or nil
     if not _G.__sodium_anti_afk_init and (not genv or not genv.__sodium_anti_afk_init) then
         if genv then genv.__sodium_anti_afk_init = true else _G.__sodium_anti_afk_init = true end
@@ -15427,7 +15197,7 @@ function Window.new(containerManager: any, props: WindowProps)
             local plrs = game:GetService("Players")
             local localPlr = plrs.LocalPlayer
 
-            -- 1. Anti-AFK on Roblox Idled signal
+            -- 1. Hook Roblox Idled signal to bypass 20-minute client disconnect timeout.
             if localPlr then
                 pcall(function()
                     localPlr.Idled:Connect(function()
@@ -15443,7 +15213,7 @@ function Window.new(containerManager: any, props: WindowProps)
                 end)
             end
 
-            -- 2. 5-Minute loop: simulate mouse click and jump
+            -- 2. Periodic 5-minute watchdog simulating user input to maintain active session.
             while true do
                 task.wait(300) -- every 5 minutes (300 seconds)
                 local isAct = (self and self._antiAfkEnabled) or (genv and genv.__sodium_anti_afk_active) or (_G.__sodium_anti_afk_active)
@@ -15467,7 +15237,7 @@ function Window.new(containerManager: any, props: WindowProps)
         if genv then genv.__sodium_anti_afk_active = true else _G.__sodium_anti_afk_active = true end
     end
 
-    -- Auto-Load and Auto-Save on startup if configured
+    -- Executes auto-load and configures scheduled autosave if persistence flags are enabled.
 
     return self
 end
@@ -15617,7 +15387,7 @@ function Window:_initDragging(dragHandle: GuiObject)
                 self._dragEndConn = nil
             end
             
-            -- Zero-Latency Direct 1:1 Event-Driven Tracking with UIScale Compensation
+            -- Real-time cursor drag tracking compensated for UIScale factors to prevent coordinate drift.
             self._dragConn = UserInputService.InputChanged:Connect(function(moveInput)
                 if not isDragging then
                     stopDragging()
@@ -15644,7 +15414,7 @@ function Window:_initDragging(dragHandle: GuiObject)
                 end
             end)
             
-            -- Dynamic End Listener: Cleanly bound on InputBegan and disconnected on InputEnded
+            -- Event lifecycle hygiene: binds drag release listeners on press and cleans up on release.
             self._dragEndConn = UserInputService.InputEnded:Connect(function(endInput)
                 if endInput.UserInputType == Enum.UserInputType.MouseButton1 or endInput.UserInputType == Enum.UserInputType.Touch then
                     stopDragging()
@@ -15653,7 +15423,6 @@ function Window:_initDragging(dragHandle: GuiObject)
         end
     end)
     
-    -- Decoupled MainUI preserves user coordinates; Control Button strictly clamped
     self.ContainerManager.OnScaleChanged = function(_newScale)
         if self._clampWidgetToScreen then
             self._clampWidgetToScreen()
@@ -15666,7 +15435,7 @@ function Window:_initResizing(resizeHandle: GuiObject)
     local startMousePos = Vector2.zero
     local startSize = Vector2.zero
     
-    -- Explicit Requested Minimum Bounds: 680x460
+    -- Minimum window dimensions enforced during interactive resize gestures: 680x460.
     local MIN_WIDTH = math.max(680, (self._sidebarWidth or 200) + 400)
     local MIN_HEIGHT = 460
 
@@ -15784,7 +15553,7 @@ function Window:ToggleVisibility()
         self.IsVisible = false
         self.IsMinimized = true
         
-        -- Perfectly Synchronized Lockstep Exit (0.20s Cubic Out: Fade + Scale)
+        -- Lockstep window exit transition (0.20s Cubic Out: concurrent opacity fade and scale).
         local exitTween = Tweener.Info.MacOSWindowClose
 
         if self.GlowScale then
@@ -15812,7 +15581,7 @@ function Window:ToggleVisibility()
             end
         end
         
-        -- Smooth seamless handoff to floating Dynamic Island (Starts immediately in parallel with exact same duration)
+        -- Seamless state morphing between main window and compact Dynamic Island widget.
         if self.MinWidget then
             self.MinWidget.Visible = true
             if self.MinWidgetScale then
@@ -15830,7 +15599,7 @@ function Window:ToggleVisibility()
         self.IsVisible = true
         self.IsMinimized = false
 
-        -- Smooth entrance to Window (0.24s Cubic Out: Fade in from transparent + scale in from 0.94)
+        -- Window entrance transition (0.24s Cubic Out: opacity fade-in and scale-up from 0.94).
         local entranceTween = Tweener.Info.MacOSWindowOpen
 
         self.MainFrame.Visible = true
@@ -15854,7 +15623,6 @@ function Window:ToggleVisibility()
             end
         end
         
-        -- Seamless fade/scale exit for floating Dynamic Island
         if self.MinWidget and self.MinWidget.Visible then
             if self.MinWidgetScale then
                 Tweener.Tween(self.MinWidgetScale, entranceTween, { Scale = 0.88 }, function()
@@ -15917,7 +15685,7 @@ function Window:SelectTab(targetTab: any)
     self:ScrollToTab(targetTab)
     self:UpdateIndicator(false)
     
-    -- Absolute Coordinate Lock: Keep indicator locked onto targetTab whenever layout shifts (without interrupting active tween)
+    -- Dynamic indicator tracking: locks position to target tab during layout reflows.
     if self._activeBtnPosConn then
         self._activeBtnPosConn:Disconnect()
         self._activeBtnPosConn = nil
@@ -15964,7 +15732,6 @@ function Window:TrackHover(targetTab: any)
     end
     
     if self.HoverTracker.BackgroundTransparency >= 0.99 then
-        -- Link starting coordinates of HoverTracker directly to the current position of TabIndicator
         if self.TabIndicator and self.TabIndicator.Visible then
             self.HoverTracker.Position = self.TabIndicator.Position
             self.HoverTracker.Size = self.TabIndicator.Size
@@ -16044,9 +15811,7 @@ function Window:UpdateIndicator(immediate: boolean?)
         return
     end
     
-    -- TargetPos = Element.AbsolutePosition - Container.AbsolutePosition
-    -- TargetSize = Element.AbsoluteSize
-    local relX = (btnPos.X - overlayPos.X) / scale
+            local relX = (btnPos.X - overlayPos.X) / scale
     local relY = (btnPos.Y - overlayPos.Y) / scale
     local width = btnSize.X / scale
     local height = btnSize.Y / scale
@@ -16062,8 +15827,6 @@ function Window:UpdateIndicator(immediate: boolean?)
     local targetPos = UDim2.fromOffset(relX, relY)
     local targetSize = UDim2.fromOffset(width, height)
     
-    -- When immediate layout shift occurs (e.g. accordion collapse):
-    -- Allow in-motion tween to run until completion before locking to AbsolutePosition
     if immediate then
         if self._indicatorTween then
             return
@@ -16099,13 +15862,13 @@ function Window:UpdateIndicator(immediate: boolean?)
     end
 end
 
--- Auto-Scroll Active Tab into View (Smoothly scrolls tabList so targetTab is fully visible)
+-- Auto-scrolls tab viewport to ensure newly selected tabs are fully visible.
 function Window:ScrollToTab(targetTab: any, immediate: boolean?)
     if not targetTab or not self.SidebarTabList then return end
     local btn = targetTab.SidebarButton
     if not btn or not btn.Parent or not btn.Visible then return end
     
-    -- Ensure parent category accordion is opened
+    -- Expands parent TabSection accordion if target tab is nested inside a collapsed group.
     if targetTab.ParentSection and not targetTab.ParentSection.Opened then
         targetTab.ParentSection:Toggle(true)
     end
@@ -16298,9 +16061,11 @@ function Window:GetConfigs(): { string }
         end
         table.sort(names)
         if #names == 0 then
-            self:SaveConfig("Main", true)
             table.insert(names, "Main")
             self._configNameMap["main"] = "Main"
+            self._cachedConfigs = names
+            self:SaveConfig("Main", true)
+            return names
         end
         self._cachedConfigs = names
         return names
@@ -16325,11 +16090,13 @@ function Window:GetConfigs(): { string }
         end
     end
 
-    -- If no config exists, automatically create Main.json
+    -- Auto-initialization: creates default "Main" configuration profile on first run.
     if #results == 0 then
-        self:SaveConfig("Main", true)
         table.insert(results, "Main")
         self._configNameMap["main"] = "Main"
+        self._cachedConfigs = results
+        self:SaveConfig("Main", true)
+        return results
     end
 
     table.sort(results)
@@ -16341,12 +16108,12 @@ function Window:SaveConfig(name: string, silent: boolean?): boolean
     local rawName = (name and name ~= "") and name or "Main"
     local lower = string.lower(rawName)
 
-    -- Ensure cache & name map are populated
+    -- In-memory cache initialization for O(1) configuration profile queries.
     if not self._cachedConfigs then
         self:GetConfigs()
     end
 
-    -- Case-insensitive deduplication using O(1) hash map
+    -- O(1) case-insensitive configuration filename deduplication via lookup table.
     local cfgName = self._configNameMap[lower] or rawName
     self._selectedConfigName = cfgName
 
@@ -16388,12 +16155,12 @@ function Window:SaveConfig(name: string, silent: boolean?): boolean
         self._virtualConfigs[cfgName] = json
     end
 
-    -- Clear dirty flags after successful save
+    -- Resets dirty modification flags upon completed filesystem write operation.
     if self._dirtyFlags then
         table.clear(self._dirtyFlags)
     end
 
-    -- Invalidate file list cache
+    -- Invalidates cached directory entries to force fresh read on subsequent queries.
     self:_invalidateConfigCache()
 
     if not silent and self.Notify then
@@ -16450,7 +16217,7 @@ function Window:LoadConfig(name: string, silent: boolean?): boolean
         return false
     end
 
-    -- Batch apply flag values without firing redundant save cycles or animations
+    -- Batched state application: updates element flags without triggering redundant saves or animations.
     self._isLoadingConfig = true
     for flag, val in pairs(data.Flags) do
         local elem = self.Flags[flag]
@@ -16710,7 +16477,6 @@ function Window:Destroy()
 	end)
 end
 
--- Aliases for API flexibility
 
 Window.CreateTab = Window.Tab
 Window.AddTab = Window.Tab
