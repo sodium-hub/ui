@@ -11,11 +11,6 @@ return {
         Icon = "https://www.roblox.com/games/113290951185459/Anime-Dice",
     },
     {
-        Name = "Greedy Growers",
-        Status = "Online",
-        Icon = "https://www.roblox.com/games/74102906764176/Greedy-Growers",
-    },
-    {
         Name = "+1 Loot To Forge",
         Status = "Online",
         Icon = "https://www.roblox.com/games/118805555015549/1-Loot-To-Forge",
@@ -34,11 +29,6 @@ return {
         Name = "Untitled boxing game",
         Status = "Online",
         Icon = "https://www.roblox.com/games/13621938427/STREET-FIGHTER-6-x-UBG",
-    },
-    {
-        Name = "Break and Steal an Egg",
-        Status = "Risk",
-        Icon = "https://www.roblox.com/games/114326934417838/Break-and-Steal-an-Egg",
     },
     {
         Name = "Anime Zero",
