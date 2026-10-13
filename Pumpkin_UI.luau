@@ -11797,6 +11797,10 @@ function Tab:Paragraph(props: any)
     return self:_getOrCreateDefaultSection():Paragraph(props)
 end
 
+function Tab:Stepper(props: any)
+    return self:_getOrCreateDefaultSection():Stepper(props)
+end
+
 function Tab:Divider(props: any)
     return self:_getOrCreateDefaultSection():Divider(props)
 end
@@ -12569,119 +12573,89 @@ function Tab:DashboardView(rawProps: any?)
         keyBtn.Activated:Connect(startListening)
         keyBtn.Parent = keySlot
 
-        -- Row 3: Anti-AFK Switch (Prevents Roblox 20-minute idle kick: Idled event & 5-minute click + jump loop)
-        local _, afkSlot = createSettingRow("zap", "Anti-AFK", "Auto click & jump every 5 mins")
+        -- Row 3: Anti-AFK Switch (Interactive toggle across full row & track)
+        local afkRow, afkSlot = createSettingRow("zap", "Anti-AFK", "Auto click & jump every 5 mins")
+        local isAfkOn = (win and win._antiAfkEnabled == true)
+
         local afkTrack = Instance.new("TextButton")
         afkTrack.Name = "AntiAFKTrack"
-        afkTrack.Size = UDim2.fromOffset(44, 24)
+        afkTrack.Size = UDim2.fromOffset(40, 22)
         afkTrack.Position = UDim2.new(1, 0, 0.5, 0)
         afkTrack.AnchorPoint = Vector2.new(1, 0.5)
-        afkTrack.BackgroundColor3 = if (win and win._antiAfkEnabled) then Theme.GetToken("Accent") else Color3.fromRGB(36, 30, 44)
+        afkTrack.BackgroundColor3 = if isAfkOn then Theme.GetToken("Accent") else Theme.GetToken("SurfaceActive")
+        afkTrack.BorderSizePixel = 0
         afkTrack.AutoButtonColor = false
         afkTrack.Text = ""
+        afkTrack.ZIndex = 125
 
         local aftCorner = Instance.new("UICorner")
-        aftCorner.CornerRadius = UDim.new(1, 0)
+        aftCorner.CornerRadius = Theme.Radii.Pill
         aftCorner.Parent = afkTrack
 
         local aftStroke = Instance.new("UIStroke")
-        aftStroke.Color = if (win and win._antiAfkEnabled) then Theme.GetToken("BorderAccent") else Theme.GetToken("BorderSubtle")
+        aftStroke.Color = if isAfkOn then Theme.GetToken("BorderAccent") else Theme.GetToken("BorderSubtle")
         aftStroke.Thickness = 1
+        aftStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
         aftStroke.Parent = afkTrack
 
         local afkThumb = Instance.new("Frame")
         afkThumb.Name = "Thumb"
-        afkThumb.Size = UDim2.fromOffset(18, 18)
-        afkThumb.Position = if (win and win._antiAfkEnabled) then UDim2.new(1, -21, 0.5, 0) else UDim2.new(0, 3, 0.5, 0)
+        afkThumb.Size = UDim2.fromOffset(16, 16)
+        afkThumb.Position = if isAfkOn then UDim2.new(1, -19, 0.5, 0) else UDim2.new(0, 3, 0.5, 0)
         afkThumb.AnchorPoint = Vector2.new(0, 0.5)
         afkThumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         afkThumb.BorderSizePixel = 0
+        afkThumb.ZIndex = 126
         local afthCorner = Instance.new("UICorner")
-        afthCorner.CornerRadius = UDim.new(1, 0)
+        afthCorner.CornerRadius = Theme.Radii.Pill
         afthCorner.Parent = afkThumb
         afkThumb.Parent = afkTrack
+        afkTrack.Parent = afkSlot
 
-        Tweener.BindPressFeedback(afkTrack, afkTrack)
+        -- Trigger button over the row content (behind the right slot so it doesn't block the switch)
+        local afkTriggerBtn = Instance.new("TextButton")
+        afkTriggerBtn.Name = "TriggerButton"
+        afkTriggerBtn.Size = UDim2.new(1, -80, 1, 0)
+        afkTriggerBtn.Position = UDim2.fromScale(0, 0)
+        afkTriggerBtn.BackgroundTransparency = 1
+        afkTriggerBtn.Text = ""
+        afkTriggerBtn.AutoButtonColor = false
+        afkTriggerBtn.ZIndex = 124
+        afkTriggerBtn.Parent = afkRow
 
+        Tweener.BindPressFeedback(afkTrack, afkTrack, 0.94)
+
+        local isToggling = false
         local function toggleAntiAfk()
-            local newState = not (win and win._antiAfkEnabled)
+            if isToggling then return end
+            isToggling = true
+
+            local curState = (win and win._antiAfkEnabled == true)
+            local newState = not curState
             if win then
                 win._antiAfkEnabled = newState
             end
 
-            local targetThumbPos = if newState then UDim2.new(1, -21, 0.5, 0) else UDim2.new(0, 3, 0.5, 0)
-            local targetTrackCol = if newState then Theme.GetToken("Accent") else Color3.fromRGB(36, 30, 44)
+            local targetThumbPos = if newState then UDim2.new(1, -19, 0.5, 0) else UDim2.new(0, 3, 0.5, 0)
+            local targetTrackCol = if newState then Theme.GetToken("Accent") else Theme.GetToken("SurfaceActive")
             local targetStrokeCol = if newState then Theme.GetToken("BorderAccent") else Theme.GetToken("BorderSubtle")
 
-            Tweener.Tween(afkThumb, TweenInfo.new(0.20, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = targetThumbPos })
-            Tweener.Tween(afkTrack, TweenInfo.new(0.20), { BackgroundColor3 = targetTrackCol })
-            Tweener.Tween(aftStroke, TweenInfo.new(0.20), { Color = targetStrokeCol })
+            Tweener.Tween(afkThumb, Tweener.Info.Normal, { Position = targetThumbPos })
+            Tweener.Tween(afkTrack, Tweener.Info.Normal, { BackgroundColor3 = targetTrackCol })
+            Tweener.Tween(aftStroke, Tweener.Info.Normal, { Color = targetStrokeCol })
 
-            -- Initialize Global Anti-AFK Engine if not already started
             local genv = (type(getgenv) == "function" and getgenv()) or nil
-            if not _G.__sodium_anti_afk_init and (not genv or not genv.__sodium_anti_afk_init) then
-                if genv then genv.__sodium_anti_afk_init = true else _G.__sodium_anti_afk_init = true end
-                task.spawn(function()
-                    local vu = game:GetService("VirtualUser")
-                    local plrs = game:GetService("Players")
-                    local localPlr = plrs.LocalPlayer
-
-                    -- 1. Anti-AFK on Roblox Idled signal
-                    if localPlr then
-                        pcall(function()
-                            localPlr.Idled:Connect(function()
-                                local isAct = (win and win._antiAfkEnabled) or (genv and genv.__sodium_anti_afk_active) or (_G.__sodium_anti_afk_active)
-                                if isAct then
-                                    pcall(function()
-                                        vu:Button2Down(Vector2.zero, workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
-                                        task.wait(1)
-                                        vu:Button2Up(Vector2.zero, workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
-                                    end)
-                                end
-                            end)
-                        end)
-                    end
-
-                    -- 2. 5-Minute loop: simulate mouse click and jump
-                    while true do
-                        task.wait(300) -- every 5 minutes (300 seconds)
-                        local isAct = (win and win._antiAfkEnabled) or (genv and genv.__sodium_anti_afk_active) or (_G.__sodium_anti_afk_active)
-                        if isAct then
-                            -- VirtualUser screen click
-                            pcall(function()
-                                vu:Button2Down(Vector2.zero, workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
-                                task.wait(0.2)
-                                vu:Button2Up(Vector2.zero, workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
-                            end)
-
-                            -- Character Jump simulation
-                            pcall(function()
-                                local char = localPlr and localPlr.Character
-                                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                                if hum and hum.Health > 0 then
-                                    hum:ChangeState(Enum.HumanoidStateType.Jumping)
-                                end
-                            end)
-                        end
-                    end
-                end)
-            end
-
             if genv then genv.__sodium_anti_afk_active = newState else _G.__sodium_anti_afk_active = newState end
 
-            if win and win.Notify then
-                win:Notify({
-                    Title = "Anti-AFK",
-                    Content = if newState then "Anti-AFK Enabled (Auto click & jump every 5m)" else "Anti-AFK Disabled",
-                    Duration = 2.0,
-                    Icon = if newState then "check" else "alert-circle",
-                })
-            end
+            task.delay(0.15, function()
+                isToggling = false
+            end)
         end
 
         afkTrack.MouseButton1Click:Connect(toggleAntiAfk)
         afkTrack.Activated:Connect(toggleAntiAfk)
-        afkTrack.Parent = afkSlot
+        afkTriggerBtn.MouseButton1Click:Connect(toggleAntiAfk)
+        afkTriggerBtn.Activated:Connect(toggleAntiAfk)
 
         modal.Parent = overlay
         overlay.Parent = targetParent
@@ -14318,6 +14292,8 @@ Tab.CreateKeybind = Tab.Keybind
 Tab.AddKeybind = Tab.Keybind
 Tab.CreateParagraph = Tab.Paragraph
 Tab.AddParagraph = Tab.Paragraph
+Tab.CreateStepper = Tab.Stepper
+Tab.AddStepper = Tab.Stepper
 Tab.CreateDivider = Tab.Divider
 Tab.AddDivider = Tab.Divider
 
@@ -14448,6 +14424,7 @@ function Window.new(containerManager: any, props: WindowProps)
     self.IsVisible = true
     self.IsMinimized = false
     self.IsFullScreen = false
+    self._antiAfkEnabled = true -- Enabled by default from startup
     
     local defaultSize = props.Size or UDim2.fromOffset(740, 520)
     self._savedSize = defaultSize
@@ -15316,7 +15293,7 @@ function Window.new(containerManager: any, props: WindowProps)
                 },
                 {
                     Title = { en = "Close", th = "ปิดหน้าต่าง" },
-                    Style = "Danger",
+                    Style = "Primary",
                     Callback = function()
                         self:Destroy()
                     end
@@ -15436,17 +15413,57 @@ function Window.new(containerManager: any, props: WindowProps)
     self.OverviewSection = overviewSection
     self.DashboardTab = dashboardTab
 
+    -- Start Anti-AFK Engine immediately (Silent, enabled by default)
+    local genv = (type(getgenv) == "function" and getgenv()) or nil
+    if not _G.__sodium_anti_afk_init and (not genv or not genv.__sodium_anti_afk_init) then
+        if genv then genv.__sodium_anti_afk_init = true else _G.__sodium_anti_afk_init = true end
+        if genv then genv.__sodium_anti_afk_active = true else _G.__sodium_anti_afk_active = true end
+        task.spawn(function()
+            local vu = game:GetService("VirtualUser")
+            local plrs = game:GetService("Players")
+            local localPlr = plrs.LocalPlayer
+
+            -- 1. Anti-AFK on Roblox Idled signal
+            if localPlr then
+                pcall(function()
+                    localPlr.Idled:Connect(function()
+                        local isAct = (self and self._antiAfkEnabled) or (genv and genv.__sodium_anti_afk_active) or (_G.__sodium_anti_afk_active)
+                        if isAct then
+                            pcall(function()
+                                vu:Button2Down(Vector2.zero, workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
+                                task.wait(1)
+                                vu:Button2Up(Vector2.zero, workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
+                            end)
+                        end
+                    end)
+                end)
+            end
+
+            -- 2. 5-Minute loop: simulate mouse click and jump
+            while true do
+                task.wait(300) -- every 5 minutes (300 seconds)
+                local isAct = (self and self._antiAfkEnabled) or (genv and genv.__sodium_anti_afk_active) or (_G.__sodium_anti_afk_active)
+                if isAct then
+                    pcall(function()
+                        vu:Button2Down(Vector2.zero, workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
+                        task.wait(0.2)
+                        vu:Button2Up(Vector2.zero, workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
+                    end)
+                    pcall(function()
+                        local char = localPlr and localPlr.Character
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        if hum and hum.Health > 0 then
+                            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                        end
+                    end)
+                end
+            end
+        end)
+    else
+        if genv then genv.__sodium_anti_afk_active = true else _G.__sodium_anti_afk_active = true end
+    end
+
     -- Auto-Load and Auto-Save on startup if configured
-    task.defer(function()
-        local autoTarget = self:GetAutoLoadConfig()
-        if autoTarget and autoTarget ~= "" and autoTarget ~= "none" then
-            self:LoadConfig(autoTarget, true)
-        end
-        local autoSaveTarget = self:GetAutoSaveConfig()
-        if autoSaveTarget and autoSaveTarget ~= "" and autoSaveTarget ~= "none" then
-            self:SetAutoSave(true, autoSaveTarget, true)
-        end
-    end)
 
     return self
 end
