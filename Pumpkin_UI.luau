@@ -16525,12 +16525,6 @@ function Window:DeleteConfig(name: string, silent: boolean?): boolean
     return deleted
 end
 
-    if self._onConfigListChanged then
-        pcall(self._onConfigListChanged)
-    end
-    return deleted
-end
-
 function Window:GetAutoSaveConfig(): string?
     local autoSaveFile = self.Folder .. "/autosave.txt"
     if Compat.HasFS() and Compat.IsFile(autoSaveFile) then
