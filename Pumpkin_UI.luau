@@ -11094,6 +11094,21 @@ function Section:AddConfigSection(rawProps: any?)
         end,
     })
 
+    local function updateSelectedConfig(newName: string)
+        if not newName or newName == "" then return end
+        currentName = newName
+        win._selectedConfigName = newName
+        if configInput and type(configInput.Set) == "function" then
+            configInput:Set(newName, true)
+        end
+        if win._autoSaveEnabled then
+            win:SetAutoSave(true, newName, true)
+        end
+        if win._autoLoadToggle and win._autoLoadToggle.Value then
+            win:SetAutoLoad(true, newName)
+        end
+    end
+
     local initialConfigs = win:GetConfigs()
     local configDropdown = self:Dropdown({
         Title = { en = "Select Config", th = "เลือกคอนฟิก" },
@@ -11102,11 +11117,8 @@ function Section:AddConfigSection(rawProps: any?)
         Multi = false,
         Callback = function(selected)
             if selected and selected ~= "" then
-                currentName = selected
-                win._selectedConfigName = selected
-                if configInput and type(configInput.Set) == "function" then
-                    configInput:Set(selected, true)
-                end
+                updateSelectedConfig(selected)
+                win:LoadConfig(selected, false)
             end
         end,
     })
@@ -16032,7 +16044,7 @@ function Window:NotifyFlagChange(flag: string)
 
     self._autoSaveGen = (self._autoSaveGen or 0) + 1
     local currentGen = self._autoSaveGen
-    self._autoSaveThread = task.delay(0.7, function()
+    self._autoSaveThread = task.delay(0.05, function()
         self._autoSaveThread = nil
         if self._autoSaveGen == currentGen and self._autoSaveEnabled and not self._isLoadingConfig then
             local targetName = self._autoSaveTarget or self._selectedConfigName or "Main"
@@ -16219,32 +16231,34 @@ function Window:LoadConfig(name: string, silent: boolean?): boolean
 
     -- Batched state application: updates element flags without triggering redundant saves or animations.
     self._isLoadingConfig = true
-    for flag, val in pairs(data.Flags) do
-        local elem = self.Flags[flag]
-        if elem and type(elem.Set) == "function" then
-            pcall(function()
-                elem:Set(val, false, false) -- (value, skipCallback, animate=false for instantaneous batching)
-            end)
+    task.spawn(function()
+        for flag, val in pairs(data.Flags) do
+            local elem = self.Flags[flag]
+            if elem and type(elem.Set) == "function" then
+                pcall(function()
+                    elem:Set(val, false, false) -- (value, skipCallback, animate=false for instantaneous batching)
+                end)
+            end
         end
-    end
-    self._isLoadingConfig = false
+        self._isLoadingConfig = false
 
-    if self._dirtyFlags then
-        table.clear(self._dirtyFlags)
-    end
+        if self._dirtyFlags then
+            table.clear(self._dirtyFlags)
+        end
 
-    if data.AutoSave ~= nil then
-        self:SetAutoSave(data.AutoSave, cfgName, true)
-    end
+        if data.AutoSave ~= nil then
+            self:SetAutoSave(data.AutoSave, cfgName, true)
+        end
 
-    if not silent and self.Notify then
-        self:Notify({
-            Title = "Config Loaded",
-            Content = "Applied profile: " .. cfgName,
-            Duration = 2.5,
-            Icon = "check",
-        })
-    end
+        if not silent and self.Notify then
+            self:Notify({
+                Title = "Config Loaded",
+                Content = "Applied profile: " .. cfgName,
+                Duration = 2.5,
+                Icon = "check",
+            })
+        end
+    end)
     return true
 end
 
